@@ -1,0 +1,9 @@
++ *
+- Sorry, I didn't understand that. You can use the question mark at the top for help with any part of the game.
+
++ whats your name
+- My name is <env char_name>.
+^ Why would you ask me that when you can see it at the top of your screen?
+
++ (hello|hi)
+- Hi! How's it going?
