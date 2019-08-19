@@ -77,8 +77,8 @@
         "velocity-animate": "^1.5.2"
     },
     "scripts": {
-        "watch": "parcel index.html -p 8080",
-        "build": "node build.js",
+        "watch": "parcel index.html -p 8080 --no-source-maps --no-autoinstall",
+        "build": "parcel build index.html --no-source-maps --no-autoinstall",
         "start": "npm run watch"
     },
     "devDependencies": {

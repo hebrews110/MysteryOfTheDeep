@@ -15,10 +15,17 @@ declare interface Function {
 }
 declare interface JQuery {
     randomize(childElem: string): JQuery;
+    equals(otherElement: JQuery): boolean;
 }
 
 declare namespace JSX {
     interface Element {
+        gametools_val: {};
+    }
+    
+}
+declare namespace React {
+    interface ReactElement<P = any, T extends string | import('react').JSXElementConstructor<any> = string | JSXElementConstructor<any>> {
         gametools_val: {};
     }
 }

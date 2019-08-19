@@ -19,65 +19,44 @@ import 'bootstrap';
 
 
 
-import * as React from 'react';
-React;
+import React, { Suspense, lazy } from 'react';
 
 import * as ReactDOM from 'react-dom';
-ReactDOM;
 
 import * as ReactDOMServer from 'react-dom/server';
-ReactDOMServer;
 
 
 import { RoutedTabs, NavTab } from "react-router-tabs";
-RoutedTabs;
-NavTab;
 
 import { MemoryRouter as Router, Route, Link } from "react-router-dom";
-Router;
-Route;
-Link;
 
 import { default as Moment, MomentProps } from 'react-moment';
-Moment;
 
 import moment from 'moment';
-moment;
 
 import paula_pacific from './external/paula_pacific.png';
-paula_pacific;
 
 import RiveScript from './node_modules/rivescript/lib/rivescript.js';
-RiveScript;
 
 
-import { Widget, dropMessages, addResponseMessage, toggleInputDisabled, toggleMsgLoader } from './components/chat/index.js';
-Widget;
-dropMessages;
-addResponseMessage;
-toggleInputDisabled;
-toggleMsgLoader;
+/* import { Widget, dropMessages, addResponseMessage, toggleInputDisabled, toggleMsgLoader } from './components/chat/index.js'; */
 
 import '@fortawesome/fontawesome-free/css/all.css';
 
 import 'intersection-observer';
 
 import domtoimage from 'dom-to-image-more';
-domtoimage;
 
 import BrowserDetect from './components/browserdetect.js';
-BrowserDetect;
 
 import 'jquery-touch-events';
 
 import pluralize from 'pluralize';
-pluralize;
 
 import ScrollBooster from 'scrollbooster';
-ScrollBooster;
 
 require('velocity-animate');
-/*
+
 
 namespace GameTools {
     export let helpRef: React.RefObject<any>;
@@ -103,6 +82,17 @@ namespace GameTools {
                     $this.append(elems[i]);      
                 }
             });    
+        };
+        $.fn.equals = function(compareTo) {
+            if (!compareTo || this.length != compareTo.length) {
+              return false;
+            }
+            for (var i = 0; i < this.length; ++i) {
+              if (this[i] !== compareTo[i]) {
+                return false;
+              }
+            }
+            return true;
         };
     })(jQuery);
     export let currentLevel = 0;
@@ -741,7 +731,7 @@ namespace GameTools {
         await item.display();
     }
     export interface DragTargetsQuestionItem {
-        target: GameValue<string>;
+        target?: GameValue<string>;
         name: GameValue<string>;
     }
 
@@ -839,25 +829,35 @@ namespace GameTools {
             $itemsDiv.addClass("items-div");
             this.items.forEach(item => {
                 const target = item.target;
-                let $span = $("<span></span>");
-                getValue(target, $span.get(0));
-                let $div = $("<div></div>").append($span).addClass("target");
-                $div.data("my-text", target);
-                $targetsDiv.append($div);
-                $div.append($("<i></i>").addClass("fas fa-question-circle").click(function() {
-                    var $target = $(this).parent();
-                    cancelTooltipTimeout($target);
-                    $target.tooltip('show');
-                    $target.data("tooltip-timeout", setTimeout(() => {
-                        $target.tooltip('hide');
-                    }, 3000));
-                }));
-                $div.children("i").hide();
-
-
-                const $targetDiv = $div;
+                let $targetDiv = null;
+                if(target != null && target != undefined) {
+                    let $span = $("<span></span>");
+                    getValue(target, $span.get(0));
+                    let $div = $("<div></div>").append($span).addClass("target");
+                    $div.data("my-text", target);
+                    $targetsDiv.append($div);
+                    $div.append($("<i></i>").addClass("fas fa-question-circle").click(function() {
+                        var $target = $(this).parent();
+                        cancelTooltipTimeout($target);
+                        $target.tooltip('show');
+                        $target.data("tooltip-timeout", setTimeout(() => {
+                            $target.tooltip('hide');
+                        }, 3000));
+                    }));
+                    $div.children("i").hide();
+    
+    
+                    $targetDiv = $div;
+                    
+                    
+                    $targetDiv.attr("title", $targetDiv.data("my-text"));
+                    $targetDiv.tooltip({
+                        html: true
+                    });
+                    $targetDiv.tooltip('disable');
+                }
                 const backColor = HSLToHex(getRandomInt(0, 360), 100, 90);
-                $div = $("<div></div>").addClass("drag-item").data("target", $targetDiv).css({
+                let $div = $("<div></div>").addClass("drag-item").data("target", $targetDiv).css({
                     "background-color": backColor,
                     "color": getContrastYIQ(backColor)
                 });
@@ -865,11 +865,6 @@ namespace GameTools {
                 getValue(item.name, $tmpDiv.get(0));
                 $div.append($tmpDiv);
                 $itemsDiv.append($div);
-                $targetDiv.attr("title", $targetDiv.data("my-text"));
-                $targetDiv.tooltip({
-                    html: true
-                });
-                $targetDiv.tooltip('disable');
             });
             if(this.shuffleTargets)
                 ($targetsDiv as any).randomize();
@@ -885,6 +880,15 @@ namespace GameTools {
                 }
             };
             let displayedItem = this;
+            let outFunction = function (event, ui) {
+                console.log("out");
+                if($(this).hasClass("target") && $(this).children(".drag-item").hasClass("ui-draggable-dragging")) {
+                    console.log($(this).children().get(0));
+                    $(this).children("i").hide();
+                    $(this).children("span").show();
+                    $(this).tooltip('disable');
+                }
+            };
             let dropFunction = function( event, ui ) {
                 $(this).trigger("gt.before_drop");
                 let $draggable = $(document).find(".ui-draggable-dragging");
@@ -900,22 +904,15 @@ namespace GameTools {
                     "left": ""
                 });
                 var $newParent = $(this);
-                if(!displayedItem.allowMultiple && ($(this).hasClass("target") && $(this).find(".drag-item").length != 0)) {
+                let isTeleporting = false;
+                if(!displayedItem.allowMultiple && ($(this).hasClass("target") && $(this).find(".drag-item").length != 0) && !$draggable.equals($(this).find(".drag-item"))) {
                     $newParent = $itemsDiv;
+                    isTeleporting = true;
+                    
                 }
                 $draggable.detach().appendTo($newParent);
-                console.log(this);
                 if($newParent.is($itemsDiv))
                     $draggable.css({ "position": "relative"});
-            };
-            let outFunction = function (event, ui) {
-                console.log("out");
-                if($(this).hasClass("target") && $(this).children(".drag-item").hasClass("ui-draggable-dragging")) {
-                    console.log($(this).children().get(0));
-                    $(this).children("i").hide();
-                    $(this).children("span").show();
-                    $(this).tooltip('disable');
-                }
             };
             let dragInfo: JQueryUI.DraggableOptions = {
                 containment: $("body"),
@@ -1709,7 +1706,10 @@ namespace GameTools {
         }
         render() {
             const { showCloseButton, ...rest} = this.props;
-            return <Widget showCloseButton={this.state.showCloseButton} {...rest}/>;
+            const Widget = React.lazy(() => import('./components/chat/Widget.js'));
+            return <Suspense fallback={<div>Loading...</div>}>
+               <Widget showCloseButton={this.state.showCloseButton} {...rest}/>
+            </Suspense>;
         }
     }
     export class DialogueExperience extends ReactInfoBox {
@@ -1730,6 +1730,7 @@ namespace GameTools {
             this.displayNext();
         }
         async handleNewUserMessage(newMessage) {
+            const { toggleInputDisabled, toggleMsgLoader, addResponseMessage } = await import('./components/chat/index.js');
             toggleInputDisabled();
             await sleep(1000);
             console.log("Message converted to: " + newMessage);
@@ -1786,6 +1787,7 @@ namespace GameTools {
             
         }
         async reset() {
+            const { dropMessages } = await import('./components/chat/index.js');
             dropMessages();
             this.currentStatement = 0;
             this.asked = new Set<string>();
@@ -2160,6 +2162,7 @@ let myArray = [
     </>, "OK", GameTools.InfoBox.defaultDelay, { customBackgroundClassList: "paper-background"})),
     GameTools.label("breakingNews", new GameTools.DragTargetsQuestion("", [
         { name: "Herring", target: "What eats Plankton?" },
+        { name: "Plankton" }
     ])),
     new GameTools.Loop({ index: "breakingNews"})
 ];
@@ -2187,4 +2190,3 @@ $(window).on("load", async function() {
     });
     GameTools.startDisplay(myArray);
 });
-*/
