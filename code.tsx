@@ -1,23 +1,27 @@
 /// <reference path="gametools.d.ts" />
 
+/* import "./components/polyfills.js"; */
 import "core-js/stable";
 import "regenerator-runtime/runtime";
 
 import './external/import-jquery';
 
-import './styles.scss'; 
 import './external/jquery.svg.min';
 import './external/jquery.svg.css';
 
-import 'jquery-ui-bundle';
-import 'jquery-ui-bundle/jquery-ui.css';
+import './external/jqueryui/jquery-ui.min.js';
+import './external/jqueryui/jquery-ui.min.css';
 
 import './external/jquery.ui.touch-punch.min.js';
 
 import 'popper.js';
 import 'bootstrap';
 
-
+/*
+require('./styles.scss');
+require('./external/jquery.svg.min');
+require('./external/jquery.svg.css');
+*/
 
 import React, { Suspense, lazy } from 'react';
 
@@ -30,16 +34,7 @@ import { RoutedTabs, NavTab } from "react-router-tabs";
 
 import { MemoryRouter as Router, Route, Link } from "react-router-dom";
 
-import { default as Moment, MomentProps } from 'react-moment';
-
-import moment from 'moment';
-
 import paula_pacific from './external/paula_pacific.png';
-
-import RiveScript from './node_modules/rivescript/lib/rivescript.js';
-
-
-/* import { Widget, dropMessages, addResponseMessage, toggleInputDisabled, toggleMsgLoader } from './components/chat/index.js'; */
 
 import '@fortawesome/fontawesome-free/css/all.css';
 
@@ -49,11 +44,23 @@ import domtoimage from 'dom-to-image-more';
 
 import BrowserDetect from './components/browserdetect.js';
 
+import RiveScript from './node_modules/rivescript/lib/rivescript.js';
+
+import { toggleInputDisabled, toggleMsgLoader, addResponseMessage, Widget, dropMessages } from './components/chat/index.js';
+
+import moment from 'moment';
+
+import { default as Moment, MomentProps } from 'react-moment';
+
 import 'jquery-touch-events';
 
 import pluralize from 'pluralize';
 
 import ScrollBooster from 'scrollbooster';
+
+import ClipLoader from 'react-spinners/ClipLoader';
+
+import Emitter from 'component-emitter';
 
 require('velocity-animate');
 
@@ -105,12 +112,18 @@ namespace GameTools {
         indexPollers?: Array<() => void>;
         initialized?: boolean;
     }
-    export function initializeArray(array: GameArray, clearPollers = false) {
+    export function initializeArray(array: GameArray, clearPollers = false, shouldWarn = false) {
         array.contentsIndex = 0;
         
         if(!array.initialized || clearPollers)
             array.indexPollers = new Array();
         array.initialized = true;
+        array.forEach((item) => {
+            if(isDisplayedItem(item)) {
+                if(shouldWarn || item.getParentArray(false) == null)
+                    item.setParentArray(array);
+            }
+        });
     }
     function wakeUpPollers(array: GameArray) {
         let currentPollers = array.indexPollers.slice();
@@ -123,8 +136,11 @@ namespace GameTools {
         return ((item as any)._isDisplaying !== undefined);
     }
     async function toDisplayedItem(item: GameArrayItem, array?: GameArray) {
-        if(isDisplayedItem(item))
+        if(isDisplayedItem(item)) {
+            if(!item.resetOnce())
+                await item.reset();
             return (item as DisplayedItem);
+        }
         const arrayItem: GameArrayFunctionItem = (item as GameArrayFunctionItem);
         let realItem = arrayItem();
         if(isDisplayedItem(realItem)) {
@@ -147,6 +163,7 @@ namespace GameTools {
         public instantiationTrace: string;
         protected autoWakePollers: boolean;
         private wrapper: GameArrayFunctionItem;
+        private hasReset: boolean;
         public isDisplaying(): boolean {
             return this._isDisplaying;
         }
@@ -184,20 +201,32 @@ namespace GameTools {
             this.parentArray = null;
             this.arraySet = false;
             this.autoWakePollers = true;
+            this.hasReset = false;
+            Emitter(this);
         }
-        public setParentArray(array: GameArray): this {
+        public on: (event: string, fn: (...args: any[]) => void) => void;
+        public once: (event: string, fn: (...args: any[]) => void) => void;
+        public off: (event?: string, fn?: (...args: any[]) => void) => void;
+        public emit: (event: string, ...args: any[]) => void;
+        public listeners: (event: string) => ((...args: any[]) => void)[];
+        public hasListeners: (event: string) => boolean;
+        public setParentArray(array: GameArray, force = false): this {
             if(array == null) {
                 array = [ this ];
                 initializeArray(array);
             }
-            if(!this.arraySet) {
+            if(force || !this.arraySet) {
                 this.parentArray = array;
                 this.arraySet = true;
+            } else {
+                console.warn("Parent array is already set:");
+                console.warn(this.parentArray);
+                console.warn("Not being changed.");
             }
             return this;
         }
-        public getParentArray(): GameArray {
-            if(this.parentArray == null) {
+        public getParentArray(createDynamic = true): GameArray {
+            if(createDynamic && this.parentArray == null) {
                 this.setParentArray([ this ]);
                 initializeArray(this.parentArray);
             }
@@ -207,22 +236,24 @@ namespace GameTools {
         async resize() {
 
         }
-        myIndex(): number {
+        public myIndex: () => number = function() {
             let array =  this.getParentArray();
             if(this.wrapper != null)
                 return array.indexOf(this.wrapper);
             else
                 return array.indexOf(this);
-        }
+        };
         async display() {
             this._isDisplaying = true;
             visibleStack.push(this);
             DisplayedItem.updateHelp();
+            this.emit("display");
         }
         async undisplay() {
             this._isDisplaying = false;
             visibleStack.splice(visibleStack.indexOf(this), 1);
             DisplayedItem.updateHelp();
+            this.emit("undisplay");
         }
         static doLog(obj: any, logFunc: (obj: any) => any, trace: string) {
             logFunc(obj);
@@ -235,11 +266,15 @@ namespace GameTools {
         logWarning(obj: any): void {
             DisplayedItem.doLog(obj, console.warn, this.instantiationTrace);
         }
+        public isSelfContained(): boolean {
+            let array = this.getParentArray();
+            return (array.length == 1 && array[0] == this);
+        }
         getNextItem(): GameArrayItem {
             if(this.myIndex() == -1)
                 return null;
             if(this.getParentArray().contentsIndex == this.getParentArray().length - 1) {
-                this.logWarning("No next items");
+                this.logWarning("No next items at index " + this.getParentArray().contentsIndex + " (self-contained: " + this.isSelfContained() + ")");
                 return null;
             }
             this.getParentArray().contentsIndex += 1;
@@ -278,7 +313,10 @@ namespace GameTools {
             }, 0);
         }
         async reset() {
-
+            this.hasReset = true;
+        }
+        public resetOnce(): boolean {
+            return this.hasReset;
         }
     }
 
@@ -356,11 +394,11 @@ namespace GameTools {
             this.displayNext();
         }
         async undisplay() {
-            await super.undisplay();
             this.$dialog.modal('hide');
             await new Promise((resolve) => {
                 this.$dialog.one("hidden.bs.modal", () => resolve());
             });
+            await super.undisplay();
         }
         protected dialogDisplayed() {
 
@@ -520,9 +558,11 @@ namespace GameTools {
     }
     export class ReactInfoBox extends InfoBox {
         protected component: React.Component;
+        protected addContentClass: boolean;
         constructor(protected jsxElement: JSX.Element, buttonText = "OK", delay = InfoBox.defaultDelay, style?: StylisticOptions) {
             super(null, "", buttonText, delay, style);
             this.component = null;
+            this.addContentClass = true;
         }
         async reset() {
             this.component = null;
@@ -532,12 +572,20 @@ namespace GameTools {
             await super.undisplay();
             this.component = null;
         }
+        async reactComponentUpdated() {
+
+        }
         async dialogCreated() {
             this.$dialog.find(".modal-dialog").empty();
             await new Promise((resolve) => {
-                doRenderReact(this.jsxElement, this.$dialog.find(".modal-dialog").get(0), () => {
-                    let $container = this.$dialog.find(".modal-dialog").children();
-                    $container.addClass("modal-content");
+                doRenderReact(this.jsxElement, this.$dialog.find(".modal-dialog").get(0), async() => {
+                    if(this.addContentClass) {
+                        console.log("Adding content class");
+                        let $container = this.$dialog.find(".modal-dialog").children();
+                        $container.addClass("modal-content");
+                        this.addContentClass = false;
+                    }
+                    await this.reactComponentUpdated();
                     resolve();
                 });
             });
@@ -621,7 +669,7 @@ namespace GameTools {
             labels.some((e, index) => {
                 let label = (e as Label);
                 if(label.gt_label == getValue(indexVal)) {
-                    theLabel = index;
+                    theLabel = array.indexOf(label);
                     return true;
                 }
                 return false;
@@ -679,9 +727,10 @@ namespace GameTools {
                     this.getParentArray().contentsIndex += indexVal;
                 } else {
                     let theItem: number = Label.lookupItem(this.getParentArray(), indexVal);
+                    console.log("Index = " + theItem);
                     if(theItem == null)
                         throw "Undefined label: " + indexVal;
-                        this.getParentArray().contentsIndex = theItem;
+                    this.getParentArray().contentsIndex = theItem;
                 }
                 this.getParentArray().contentsIndex -= 1;
                 this.numLoops++;
@@ -722,11 +771,7 @@ namespace GameTools {
         }
         if(!array.initialized || shouldInitialize)
             initializeArray(array);
-        array.forEach((item) => {
-            if(isDisplayedItem(item)) {
-                item.setParentArray(array);
-            }
-        });
+
         let item = await toDisplayedItem(array[array.contentsIndex], array);
         await item.display();
     }
@@ -791,8 +836,8 @@ namespace GameTools {
     }
     export class DragTargetsQuestion extends InfoBox {
         static alwaysBeRight = false;
-        constructor(protected title: GameValue<string>, protected items: DragTargetsQuestionItem[], protected shuffleTargets = false, protected shuffleOptions = false, protected allowMultiple = false) {
-            super(title, "", "Check");
+        constructor(protected title: GameValue<string>, protected items: DragTargetsQuestionItem[], protected shuffleTargets = false, protected shuffleOptions = false, protected allowMultiple = false, delay = InfoBox.defaultDelay) {
+            super(title, "", "Check", delay);
         }
         buttonCallback(e: JQuery.ClickEvent): void {
             var $itemsDiv = this.$dialog.find(".modal-body .items-div");
@@ -963,6 +1008,10 @@ namespace GameTools {
         }
         async reset() {
             await super.reset();
+            this.trueStatement.setParentArray(this.getParentArray());
+            this.falseStatement.setParentArray(this.getParentArray());
+            this.trueStatement.myIndex = this.myIndex.bind(this);
+            this.falseStatement.myIndex = this.myIndex.bind(this);
             if(this.trueStatement)
                 await this.trueStatement.reset();
             if(this.falseStatement)
@@ -1023,12 +1072,19 @@ namespace GameTools {
             $(window).off("resize", InteractiveSVG.scrollHandler);
         }
     }
+    interface FinderLinkedItem<DisplayType = GameValue<string>> {
+        button: DisplayType;
+        link: GameArrayItem;
+    }
+    type FinderTemplate = (itemsFound: number, totalItems: number) => string;
     export class Finder {
         public itemsFound: number;
         private itemIndexes: any[] = [];
-        public static readonly defaultKeyword = "found";
+        public static defaultTemplate(itemsFound: number, totalItems: number) {
+            return `You have found ${itemsFound} of ${totalItems} items.`;
+        }
         public $componentFound: JQuery;
-        constructor(public parent: InfoBox, public numItems: number, public keyword = Finder.defaultKeyword) {
+        constructor(public parent: InfoBox, public numItems: number, public template: FinderTemplate = Finder.defaultTemplate) {
             this.reset();
         }
         reset(): void {
@@ -1037,16 +1093,31 @@ namespace GameTools {
         }
         setTitle(): void {
             if(this.itemsFound > 0)
-                this.parent.$dialog.find(".modal-title").text("You have " + this.keyword + " " + this.itemsFound + " of " + this.numItems + " items.");
+                this.parent.$dialog.find(".modal-title").text(this.template(this.itemsFound, this.numItems));
         }
-        itemFound($component: JQuery<any>): void {
+        static isLinkedItem<T>(item: FinderItem<T>): item is FinderLinkedItem<T> {
+            let b_item = item as FinderLinkedItem<T>;
+            return (b_item.button != undefined && b_item.link != undefined);
+        }
+        async itemFound($component: JQuery<any>) {
             
             if(this.itemIndexes.indexOf($component.data("index")) == -1) {
                 this.itemsFound++;
                 this.itemIndexes.push($component.data("index"));
             }
             this.$componentFound = $component;
-            this.parent.displayNext();
+            const element: FinderItem = $component.data("element");
+            if(Finder.isLinkedItem(element)) {
+                let item: DisplayedItem = await toDisplayedItem(element.link, null);
+                item.once("undisplay", () => {
+                    this.parent.displayNext();
+                });
+                item.display();
+                return true;
+            } else {
+                this.parent.displayNext();
+                return false;
+            }
         }
         finished(): boolean {
             return this.itemsFound == this.numItems;
@@ -1068,13 +1139,14 @@ namespace GameTools {
             await super.reset();
         }
     }
+    type FinderItem<T = GameValue<string>> = (T|FinderLinkedItem<T>);
     export class ButtonFinder extends InfoBox {
         finder: Finder;
         didDisplay = false;
         foundIndexes: number[];
-        constructor(title: GameValue<string>, public instructions: GameValue<string>, public buttons: (GameValue<string>)[], public delay = InfoBox.defaultDelay) {
+        constructor(title: GameValue<string>, public instructions: GameValue<string>, public buttons: FinderItem[], public delay = InfoBox.defaultDelay, template?: FinderTemplate) {
             super(title, instructions, null, delay);
-            this.finder = new Finder(this, buttons.length, "explored");
+            this.finder = new Finder(this, buttons.length, template);
             this.foundIndexes = [];
         }
         async reset() {
@@ -1089,7 +1161,6 @@ namespace GameTools {
                 GameTools.lastResult = false;
             else
                 GameTools.lastResult = this.finder.finished();
-            console.log(this.finder.$componentFound.get(0));
             GameTools.lastData = this.finder.$componentFound.data("index");
             await super.displayNext();
         }
@@ -1117,16 +1188,20 @@ namespace GameTools {
             var $finderButtons = $("<div></div>").addClass("finder-buttons").appendTo($body);
             this.buttons.forEach((element, index) => {
                 var $button = $("<button></button>");
-                getValue(element, $button.get(0));
+                if(!Finder.isLinkedItem(element))
+                    getValue(element, $button.get(0));
+                else
+                    getValue(element.button, $button.get(0));
                 if(this.foundIndexes.indexOf(index) != -1) {
                     $button.addClass("was_found");
                 }
                 $button.data("index", index);
                 $button.data("element", element);
-                $button.click((e) => {
+                $button.click(async(e) => {
                     $finderButtons.children("button").prop("disabled", true);
                     this.foundIndexes.push($(e.target).data("index"));
-                    this.finder.itemFound($(e.target));
+                    if(await this.finder.itemFound($(e.target)))
+                        $finderButtons.children("button").prop("disabled", false);
                 });
                 $finderButtons.append($button);
             });
@@ -1251,6 +1326,14 @@ namespace GameTools {
         }
     }
     export function monkeyPatch() {
+        $(".preloader").fadeOut(() => $(".preloader").remove());
+        // Setup our DOM elements
+        const $gametools_wrapper = $("<div></div>").attr("id", "gametools-wrapper");
+        $(document.body).append($gametools_wrapper);
+        $gametools_wrapper.append($("<div></div>").attr("id", "top-bar"));
+        $gametools_wrapper.append($("<div></div>").attr("id", "gametools-container"));
+        $("#gametools-container").append($("<div></div>").addClass("background-img").attr("id", 'bk-im-0'));
+        $("#gametools-container").append($("<div></div>").addClass("background-img").attr('id', 'bk-im-1'));
         reactedSet = new Set<HTMLElement>();
         visibleStack = [];
         moment.updateLocale('en', {
@@ -1446,7 +1529,7 @@ namespace GameTools {
         return hi as ContextualHelpItem&T;
     }
     export async function startDisplay(array: GameArray) {
-        await GameTools.resetSystem(array);
+        await GameTools.initializeArray(array);
         await GameTools.restart(array);
     }
     export function scope<T extends DisplayedItem>(array: GameValue<GameArray>, item: T): T {
@@ -1600,7 +1683,7 @@ namespace GameTools {
             });
             this.navRef = React.createRef();
             return <Router>
-                <nav ref={this.navRef} className="gt-infopage-navbar navbar navbar-expand-sm w-100">
+                <nav ref={this.navRef} className="gt-infopage-navbar navbar navbar-expand-sm w-100 align-items-end">
                     <ListComponent array={pageLinks} listType="ul" className="navbar-nav nav-fill w-100 nav-tabs d-flex flex-row justify-content-center align-items-center align-content-center" itemClassName="nav-item" />
                 </nav>
                 <div className="info-page-info">
@@ -1634,31 +1717,43 @@ namespace GameTools {
         }
         return <>{getValue(props.val)}</>;
     }
-    export function Newspaper(props: { paperName: GameValue<string>; subhead?: GameValue<string>; articles: NewspaperArticle[] }) {
-        return <div className="newspaper">
-            <div className="head modal-header">
-                <div className="newspaper-headline"><ReactGameValue val={props.paperName}/></div>
-                <ModalCloseButton/>
+    export function NewspaperFigure(props: { src: string; caption?: string }) {
+        return <figure className="media">
+            <div className="figure-img">
+                <img src={props.src} alt={props.caption}/>
             </div>
-            <div className="subhead">
-            <ReactGameValue val={props.subhead}/>
-            </div>
-            <div className="content">
-                <div className="columns">
-                {props.articles.map((article, index) => <div key={index} className="column">
-                    <div className="head">
-                        <span className="headline hl3"><ReactGameValue val={article.headline}/></span>
-                        <p>
-                        <span className="headline hl4"><ReactGameValue val={article.subhead}/></span>
-                        </p>
-                    </div>
-                    <p>
-                        {article.content}
-                    </p>
-                </div>)}
+            <figcaption>{props.caption}</figcaption>
+        </figure>;
+    }
+    export class Newspaper extends React.Component<{ paperName: GameValue<string>; subhead?: GameValue<string>; articles: NewspaperArticle[]; }> {
+        private static importedCss = false;
+        constructor(props) {
+            super(props);
+        }
+        render() {
+            return <div className="newspaper">
+                <div className="head modal-header">
+                    <div className="newspaper-headline"><ReactGameValue val={this.props.paperName}/></div>
+                    <ModalCloseButton/>
                 </div>
-            </div>
-        </div>;
+                <div className="subhead">
+                <ReactGameValue val={this.props.subhead}/>
+                </div>
+                <div className="content">
+                    <div className="columns">
+                    {this.props.articles.map((article, index) => <div key={index} className="column">
+                        <div className="head">
+                            <span className="headline hl3"><ReactGameValue val={article.headline}/></span>
+                            <p></p>
+                            <span className="headline hl4"><ReactGameValue val={article.subhead}/></span>
+                        </div>
+                        {article.content}
+                    </div>)}
+                    </div>
+                </div>
+            </div>;
+        }
+        
     }
     export interface DialogueAction {
         character: GameValue<"you" | "them">;
@@ -1685,7 +1780,6 @@ namespace GameTools {
     export function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
-
     export class MomentWrapper extends React.Component<MomentProps, { date: string|number|Array<string|number|object>|object}> {
         constructor(props) {
             super(props);
@@ -1706,10 +1800,7 @@ namespace GameTools {
         }
         render() {
             const { showCloseButton, ...rest} = this.props;
-            const Widget = React.lazy(() => import('./components/chat/Widget.js'));
-            return <Suspense fallback={<div>Loading...</div>}>
-               <Widget showCloseButton={this.state.showCloseButton} {...rest}/>
-            </Suspense>;
+            return <Widget showCloseButton={this.state.showCloseButton} {...rest}/>;
         }
     }
     export class DialogueExperience extends ReactInfoBox {
@@ -1720,17 +1811,18 @@ namespace GameTools {
         protected asked: Set<string>;
         protected allMessages: string[];
         protected widgetRef: React.RefObject<DialogueWidgetWrapper>;
+        protected endDialogueWhenMessageFinishes: boolean;
+        protected static doReenableInput: boolean = false;
         public static readonly builtinMessages = [
             "Hi!",
             "What's your name?"
         ];
         protected bot: RiveScript;
         async endDialogue() {
-            await sleep(2000);
+            await this.reset();
             this.displayNext();
         }
         async handleNewUserMessage(newMessage) {
-            const { toggleInputDisabled, toggleMsgLoader, addResponseMessage } = await import('./components/chat/index.js');
             toggleInputDisabled();
             await sleep(1000);
             console.log("Message converted to: " + newMessage);
@@ -1749,16 +1841,23 @@ namespace GameTools {
                 }
                 resolve();
             });
+            
             this.asked.add(newMessage);
             let requiredQuestions = this.allowedMessages;
             let notDone = requiredQuestions.some((msg) => {
                 console.log("Have we asked " + msg);
                 return !this.asked.has(msg);
             });
+            toggleInputDisabled();
             if(!notDone) {
                 this.widgetRef.current.setState({ showCloseButton: true });
+                if(this.endDialogueWhenMessageFinishes) {
+                    toggleInputDisabled();
+                    DialogueExperience.doReenableInput = true;
+                }
             }
-            toggleInputDisabled();
+            
+            
         }
         constructor(protected riveFile: string, avatar?: string, protected allowedMessages?: string[]) {
             super(null);
@@ -1770,12 +1869,13 @@ namespace GameTools {
             this.momentRef = React.createRef<MomentWrapper>();
             this.widgetRef = React.createRef<DialogueWidgetWrapper>();
             this.allMessages = DialogueExperience.builtinMessages.concat(allowedMessages);
+            this.addContentClass = false;
             this.jsxElement = <DialogueWidgetWrapper ref={this.widgetRef} fullScreenMode={false}
                                       showCloseButton={allowedMessages == undefined}
                                       title="Paula Pacific"
                                       titleAvatar={avatar}
                                       profileAvatar={avatar}
-                                      onCloseClick={this.displayNext.bind(this)}
+                                      onCloseClick={this.endDialogue.bind(this)}
                                       subtitle={<MomentWrapper ref={this.momentRef} filter={dateFilter} fromNow date={this.lastSeenTime}/>}
                                       possibleMessages={this.allMessages}
                                       inputType={allowedMessages == undefined ? "text" : "dropdown"}
@@ -1784,10 +1884,15 @@ namespace GameTools {
         async dialogCreated() {
             await super.dialogCreated();
             this.lastSeenTime = new Date();
-            
+            if(DialogueExperience.doReenableInput) {
+                toggleInputDisabled();
+                DialogueExperience.doReenableInput = false;
+            }
         }
         async reset() {
-            const { dropMessages } = await import('./components/chat/index.js');
+            this.endDialogueWhenMessageFinishes = false;
+            
+            console.log("Dropping messages");
             dropMessages();
             this.currentStatement = 0;
             this.asked = new Set<string>();
@@ -2085,6 +2190,45 @@ namespace GameTools {
             });
         }
     }
+    export class SetBackground extends DisplayedItem {
+        static nextIndex = 0;
+        public static readonly duration = 2000;
+        constructor(protected newsrc: GameValue<string>) {
+            super();
+        }
+        getImg(): JQuery<HTMLElement> {
+            return $("#gametools-container .background-img");
+        }
+        async reset() {
+            await super.reset();
+        }
+        async display() {
+            await super.display();
+            let $img = this.getImg();
+            if($img.length == 0) {
+                throw new Error("Cannot find background image object. Perhaps you forgot to monkey patch?");
+            }
+            if(this.newsrc != null) {
+                let bgImg = new Image();
+                bgImg.onload = () => {
+                    $("#gametools-container").addClass("bkgd-shown");
+                    $($img.get(SetBackground.nextIndex ^ 1)).removeClass("show");
+                    window.requestAnimationFrame(() => {
+                        $($img.get(SetBackground.nextIndex)).addClass("show");
+                        SetBackground.nextIndex ^= 1;
+                        this.displayNext();
+                    });
+                    $($img.get(SetBackground.nextIndex)).css("background-image", 'url(' + bgImg.src + ')');
+                };
+                bgImg.src = getValue(this.newsrc);
+            } else {
+                $("#gametools-container").removeClass("bkgd-shown");
+                $($img.get(SetBackground.nextIndex ^ 1)).css("background-image", "none");
+                $($img.get(SetBackground.nextIndex ^ 1)).removeClass("show");
+                this.displayNext();
+            }
+        }
+    }
 }
 
 class CreatureCard extends GameTools.InfoBox {
@@ -2139,9 +2283,48 @@ import barrels from './external/barrels.png';
 import seaweed from './external/seaweed.png';
 import diver from './external/diver.svg';
 import { connect } from "tls";
+import { Module } from "history";
+
+let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="Routine Rambler" subhead="" articles={[
+    {
+        headline: "Odd Killer Whale Behavior",
+        content: <>
+            <GameTools.NewspaperFigure src={require('./external/killer_whale_pod.jpg')} caption="Killer whales are normally very family-oriented."/>
+            Killer whales in the Awakataka Strait have been exhibiting odd behavior over the last several days.
+            <p></p>
+            Experts have noticed that the normally family-oriented whales have been wandering away from their pods.
+            <p></p>
+            Shocked by this news is Tall Teddy of Tall Teddy's Tasty Treats. When asked to comment on the situation, he said:
+            <blockquote>Aw snap, I always thought the Awakataka was the healthiest biome in the world!</blockquote>
+            An official study is yet to be conducted, but scientists report that it is not uncommon for sick animals
+            to leave their groups like this.
+        </>
+    },
+    {
+        headline: "Martin Mersenich Discovers Monster!",
+        subhead: <blockquote>This is 100% real!<footer>Martin Mesernich</footer></blockquote>,
+        content: <>
+           Martin Mersenich, a well-known figure in the community of Awakataka, has allegedly discovered what
+           he believes to be the world's largest monster.
+           <p></p>
+           "This thing makes Frankenstein, Dracula, and all those other monsters look like breadcrumbs!" Mr. Mersenich said in an interview.
+           <p></p>
+           Critics of Mr. Mersenich state that he has rarely been able to provide proof for any of his discoveries.
+        </>
+    },
+    {
+        headline: "Fishnappers Jailed",
+        content: <>
+            Authorities have finally caught the fishnappers who were wanted in connection with the theft of David G. Flounder's fish from his palatial estate last month.
+            <p></p>
+            "It was all thanks to Anna Atlantic," Mr. Flounder announced at a press conference. "This is no ordinary fish."
+            <p></p>
+            When asked to comment by a <i>Routine Rambler</i> reporter on what unique qualities the fish had, Mr. Flounder boldy proclaimed that the fish could predict the
+            future, build robots, and cook better than any other French chef out there.
+        </>
+    }
+]}/>);
 let myArray = [
-    new GameTools.Invoke(() => $(".se-pre-con").addClass("hide")),
-    new GameTools.Loop({ index: "breakingNews"}),
     new GameTools.MultipleChoiceQuestion("Choose a chapter.", [
         { html: "Chapter 1" },
         { html: "Chapter 2" },
@@ -2149,22 +2332,15 @@ let myArray = [
         { html: "Chapter 4" }
     ], false, { shouldColorBackgrounds: false, shouldShuffle: false }),
     new GameTools.Loop({ index: () => "chapter" + (GameTools.lastData + 1)}),
-    GameTools.label("chapter1", new GameTools.InfoBox("Welcome to Day 1!", <>
-        <p>Let's get started.</p>
-        <hr/>
-        <p>Today we'll be doing bla bla bla. bla bla bla.</p>
-        <hr/>
-        <p>Today we'll be doing bla bla bla. bla bla bla.</p>
-        <hr/>
-        <p>Today we'll be doing bla bla bla. bla bla bla.</p>
-        <hr/>
-        <p>Today we'll be doing bla bla bla. bla bla bla.</p>
-    </>, "OK", GameTools.InfoBox.defaultDelay, { customBackgroundClassList: "paper-background"})),
-    GameTools.label("breakingNews", new GameTools.DragTargetsQuestion("", [
-        { name: "Herring", target: "What eats Plankton?" },
-        { name: "Plankton" }
-    ])),
-    new GameTools.Loop({ index: "breakingNews"})
+    GameTools.label("chapter1"),
+    new GameTools.SetBackground(require('./external/office.svg')),
+    new GameTools.ButtonFinder("Explore Anna Atlantic's office!", "", [
+        { button: <>
+            <img src={require('./external/newspaper.svg')}/>
+            Newspaper on table
+        </>, link: day1Newspaper }
+    ], 0),
+    new GameTools.Condition(GameTools.label(""), new GameTools.Loop({ index: -1 })),
 ];
 let notebookList = [
     GameTools.noteBookItem("Item 1", myArray[GameTools.Label.lookupItem(myArray, "breakingNews")]),
@@ -2173,11 +2349,11 @@ let notebookList = [
 ];
 
 
-$(window).on("load", async function() {
+$(async function() {
     GameTools.monkeyPatch();
     GameTools.helpRef = React.createRef();
     ReactDOM.render(<>
-        <span className="top-title">Title</span>
+        <span className="top-title">{document.title}</span>
         <div className="top-buttons">
             <GameTools.ControlButton onClick={showNotebook} name="Notebook" icon="fas fa-clipboard" colorClass="btn-success"/>
             <GameTools.ControlButton onClick={showFieldGuide} name="Field Guide" icon="fas fa-book" colorClass="btn-primary"/>

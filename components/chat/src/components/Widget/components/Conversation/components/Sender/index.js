@@ -4,7 +4,6 @@ import PropTypes from 'prop-types';
 import send from '@assets/send_button.svg';
 
 import './style.scss';
-import { isPropertyAccessExpression } from 'typescript';
 
 class Sender extends Component{
   input = React.createRef();

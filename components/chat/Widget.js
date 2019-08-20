@@ -1,1 +1,0 @@
-export { Widget as default } from 'index.js';

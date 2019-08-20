@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "moduleResolution": "node",
-    "module": "esnext",
     "lib": [ "esnext", "dom", "dom.iterable", "scripthost" ],
-    "jsx": "preserve",
+    "jsx": "react",
+    "module": "esnext",
     "target": "es2018",
     "noImplicitThis": false,
     "noImplicitReturns": true,
