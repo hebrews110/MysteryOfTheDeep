@@ -394,9 +394,9 @@ namespace GameTools {
             this.displayNext();
         }
         async undisplay() {
-            this.$dialog.modal('hide');
             await new Promise((resolve) => {
                 this.$dialog.one("hidden.bs.modal", () => resolve());
+                this.$dialog.modal('hide');
             });
             await super.undisplay();
         }
@@ -1834,7 +1834,7 @@ namespace GameTools {
                 let replies = reply.split('\n');
                 for(let index = 0; index < replies.length; index++) {
                     toggleMsgLoader();
-                    await sleep(1000);
+                    await sleep(replies[index].length*100);
                     toggleMsgLoader();
                     addResponseMessage(replies[index]);
                     await sleep(500);
@@ -1859,7 +1859,7 @@ namespace GameTools {
             
             
         }
-        constructor(protected riveFile: string, avatar?: string, protected allowedMessages?: string[]) {
+        constructor(protected riveFile: string, title?: string, avatar?: string, protected allowedMessages?: string[]) {
             super(null);
             this.lastSeenTime = new Date();
             this.mustAskAll = allowedMessages != undefined;
@@ -1872,7 +1872,7 @@ namespace GameTools {
             this.addContentClass = false;
             this.jsxElement = <DialogueWidgetWrapper ref={this.widgetRef} fullScreenMode={false}
                                       showCloseButton={allowedMessages == undefined}
-                                      title="Paula Pacific"
+                                      title={title}
                                       titleAvatar={avatar}
                                       profileAvatar={avatar}
                                       onCloseClick={this.endDialogue.bind(this)}
@@ -2229,6 +2229,33 @@ namespace GameTools {
             }
         }
     }
+    export class BusinessCard extends InfoBox {
+        numClicks: number;
+        constructor(protected cardContents: GameValue<string>) {
+            super(null, null, null);
+        }
+        async reset() {
+            await super.reset();
+            this.numClicks = 0;
+        }
+        async dialogCreated() {
+            await super.dialogCreated();
+            const $button = $("<button></button>").addClass("business-card");
+            getValue(this.cardContents, $button.get(0));
+            this.$dialog.find(".modal-content").remove();
+            this.$dialog.find(".modal-dialog").append($button);
+            $button.on("click", (e) => {
+                this.numClicks++;
+                if(this.numClicks == 2) {
+                    this.buttonCallback(e);
+                }
+            });
+            $button.on("blur", () => {
+                $button.blur();
+                this.numClicks = 0;
+            });
+        }
+    }
 }
 
 class CreatureCard extends GameTools.InfoBox {
@@ -2282,14 +2309,12 @@ import whale from './external/whale.svg';
 import barrels from './external/barrels.png';
 import seaweed from './external/seaweed.png';
 import diver from './external/diver.svg';
-import { connect } from "tls";
-import { Module } from "history";
 
 let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="Routine Rambler" subhead="" articles={[
     {
         headline: "Odd Killer Whale Behavior",
         content: <>
-            <GameTools.NewspaperFigure src={require('./external/killer_whale_pod.jpg')} caption="Killer whales are normally very family-oriented."/>
+            <GameTools.NewspaperFigure src={require('./external/images/killer_whale_pod.jpg')} caption="Killer whales are normally very family-oriented."/>
             Killer whales in the Awakataka Strait have been exhibiting odd behavior over the last several days.
             <p></p>
             Experts have noticed that the normally family-oriented whales have been wandering away from their pods.
@@ -2301,7 +2326,7 @@ let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
         </>
     },
     {
-        headline: "Martin Mersenich Discovers Monster!",
+        headline: "Martin Mersenich Spots Fearsome Creature!",
         subhead: <blockquote>This is 100% real!<footer>Martin Mesernich</footer></blockquote>,
         content: <>
            Martin Mersenich, a well-known figure in the community of Awakataka, has allegedly discovered what
@@ -2322,9 +2347,23 @@ let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
             When asked to comment by a <i>Routine Rambler</i> reporter on what unique qualities the fish had, Mr. Flounder boldy proclaimed that the fish could predict the
             future, build robots, and cook better than any other French chef out there.
         </>
+    },
+    {
+        headline: "Bus Schedule Changes",
+        content: <>
+            Due to unforeseen circumstances, bus service for the town of Awakataka will be reduced to the following routes only over the next week:
+            <ul>
+                <li><b>Route 38:</b> PORPIS Rocket</li>
+                <li><b>Route 1:</b> Airport Rocket</li>
+                <li><b>Route 24:</b> Teddy Service (will only serve stops up to and including Salmon Hatchery)</li>
+            </ul>
+            <p></p>
+            Awakataka Transit apologizes for any inconvenience this may cause.
+        </>
     }
 ]}/>);
 let myArray = [
+    new GameTools.Loop({ index: "test" }),
     new GameTools.MultipleChoiceQuestion("Choose a chapter.", [
         { html: "Chapter 1" },
         { html: "Chapter 2" },
@@ -2333,14 +2372,40 @@ let myArray = [
     ], false, { shouldColorBackgrounds: false, shouldShuffle: false }),
     new GameTools.Loop({ index: () => "chapter" + (GameTools.lastData + 1)}),
     GameTools.label("chapter1"),
-    new GameTools.SetBackground(require('./external/office.svg')),
+    new GameTools.SetBackground(require('./external/images/office.svg')),
     new GameTools.ButtonFinder("Explore Anna Atlantic's office!", "", [
         { button: <>
-            <img src={require('./external/newspaper.svg')}/>
+            <img src={require('./external/images/newspaper.svg')}/>
             Newspaper on table
-        </>, link: day1Newspaper }
+        </>, link: day1Newspaper },
+        { button: <>
+            <img src={require('./external/images/business-card.svg')}/>
+            Business card
+        </>, link: new GameTools.BusinessCard(<>
+            <div className="business-card-row clearfix">
+                <div className="float-left business-card-big">(123)-777-PORP</div>
+                <div className="float-right">
+                    <p><span className="business-card-big">Pacific Ocean</span></p>
+                    <p><span style={{fontSize: "80%"}} className="business-card-no-space">Research and Protection</span></p>
+                    <p><span className="business-card-small business-card-no-space">Institute of Science</span></p>
+                </div>
+            </div>
+            <div className="business-card-row">
+                <p><span className="business-card-big">S</span>ri <span className="business-card-big">S</span>argasso</p>
+                <p><span className="business-card-big">D</span>irector</p>
+            </div>
+            <div className="business-card-row">
+                <span className="business-card-small">Trips to sea made daily. Phone to book.</span>
+            </div>
+        </>) }
     ], 0),
     new GameTools.Condition(GameTools.label(""), new GameTools.Loop({ index: -1 })),
+    GameTools.label("test", new GameTools.DialogueExperience(require('./external/atlantic.rive'), "Anna Atlantic", undefined, [
+        "What are we solving today?",
+        "Will we be working together?",
+        "Where should I start?"
+    ])),
+
 ];
 let notebookList = [
     GameTools.noteBookItem("Item 1", myArray[GameTools.Label.lookupItem(myArray, "breakingNews")]),
@@ -2348,6 +2413,7 @@ let notebookList = [
     "Item 3"
 ];
 
+(window as any).gt_imagePaths = Object.assign({}, require('./external/images/*.png'), require('./external/images/*.jpg'), require('./external/images/*.svg'));
 
 $(async function() {
     GameTools.monkeyPatch();

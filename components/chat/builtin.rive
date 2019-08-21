@@ -3,6 +3,10 @@ this.endDialogueWhenMessageFinishes = true;
 return "";
 < object
 
+> object require_img javascript
+return "![" + arguments[1][1] + "](" + window.gt_imagePaths[arguments[1][0]] + ")";
+< object
+
 + *
 - Sorry, I didn't understand that. You can use the question mark at the top for help with any part of the game.
 

@@ -48,7 +48,7 @@ html {
     .newspaper {
         text-align: left;
         background-color: #ffffff;
-        background-image: url("external/paper-2.png");
+        background-image: url("external/images/paper-2.png");
         font-family: $font-family-sans-serif;
         font-size: 14px;
         color: #2f2f2f;
@@ -147,14 +147,14 @@ html {
             text-transform: uppercase;
             padding: 10px 0 10px 0;
         }
-    
+
         .column .headline.hl2 {
             font-weight: 400;
             font-size: $h2-font-size;
             box-sizing: border-box;
             padding: 10px 0 10px 0;
         }
-    
+
         .column .headline.hl2:before {
             border-top: 1px solid #2f2f2f;
             content: "";
@@ -171,7 +171,7 @@ html {
             display: block;
             margin: 0 auto;
         }
-    
+
         .column .headline.hl3 {
             font-weight: 400;
             font-size: $h3-font-size;
@@ -200,7 +200,7 @@ html {
             display: block;
             margin: 0 auto;
         }
-    
+
         .column .headline.hl5 {
             font-weight: 400;
             font-size: $h5-font-size;
@@ -298,7 +298,7 @@ html {
                 img {
                     filter: sepia(80%) grayscale(1) contrast(1) opacity(0.8);
                     width: 100%;
-                    vertical-align:top;
+                    vertical-align: top;
                 }
                 &:after {
                     content: "";
@@ -310,7 +310,7 @@ html {
                     height: 100%;
                     max-width: 100%;
                     max-height: 100%;
-                    background: url("external/paper-2.png");
+                    background: url("external/images/paper-2.png");
                     filter: brightness(50%);
                     opacity: 0.6;
                 }
@@ -788,8 +788,6 @@ button.modal-pinned-corner-close {
     }
 }
 
-
-
 .rcw-conversation-container {
     .rcw-header {
         border-radius: 10px 10px 0 0;
@@ -1024,7 +1022,8 @@ div.jumping-dots {
     right: 0;
     transform: translateX(30%) translateY(0%) rotate(45deg);
     transform-origin: top left;
-    &:after, &:before {
+    &:after,
+    &:before {
         content: "";
         position: absolute;
         top: 0;
@@ -1041,8 +1040,6 @@ div.jumping-dots {
         left: 100%;
     }
 }
-
-
 
 .gt-infopage-modal-content {
     max-height: calc(100vh - 8.5rem);
@@ -1098,11 +1095,108 @@ div.jumping-dots {
             display: inline-flex;
         }
     }
-    .draw2d_shape_basic_Text, .draw2d_shape_basic_Label {
+    .draw2d_shape_basic_Text,
+    .draw2d_shape_basic_Label {
         stroke: none;
     }
 }
 
+@import url(https://fonts.googleapis.com/css?family=Cormorant+Garamond);
+
+.business-card {
+    border: none;
+    pointer-events: auto;
+    background-color: #f4f1eb;
+    background-image: url("https://www.transparenttextures.com/patterns/paper-fibers.png");
+    height: auto;
+    width: 80vw;
+    max-width: 25em;
+    margin: 0 auto 0 auto;
+    padding: 20px 10px 10px 10px;
+    transform: rotateX(60deg) rotateY(0deg) rotateZ(45deg);
+    font-family: "Cormorant Garamond", serif;
+    text-transform: uppercase;
+    text-align: left;
+    /*transform-origin: 50% 100%;*/
+    box-shadow: none;
+    transition: transform 0.4s ease, box-shadow 0.4s ease;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.5),
+        -1px -1px 1px rgba(179, 179, 179, 0.5),
+        1px 1px 0 rgba(255, 255, 255, 0.55), 0 1px 3px white;
+    &:hover {
+        cursor: pointer;
+        transform: rotateX(60deg) rotateY(0deg) rotateZ(45deg) translateZ(10px);
+        box-shadow: 20px 20px 20px rgba(0, 0, 0, 0.4);
+    }
+    &:focus {
+        transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateZ(10px);
+        box-shadow: 0px 10px 10px rgba(0, 0, 0, 0.4);
+        &::before {
+            transform: skewX(0deg) translateX(0px) translateY(0px);
+            height: 0px;
+        }
+        &::after {
+            transform: skewY(0deg) translateX(0px) translateY(0px);
+            width: 0px;
+        }
+    }
+    &::before,
+    &::after {
+        content: "";
+        position: absolute;
+        display: block;
+        background-color: grey;
+        transition: transform 0.4s ease, height 0.4s ease, width 0.4s ease;
+    }
+    &::before {
+        width: 100%;
+        height: 6px;
+        bottom: 0;
+        left: 0;
+        transform: skewX(45deg) translateX(-3px) translateY(6px);
+    }
+    &::after {
+        height: 100%;
+        width: 6px;
+        top: 0;
+        right: 0;
+        transform: skewY(45deg) translateX(6px) translateY(-3px);
+    }
+    p {
+        margin: 0;
+    }
+    .float-left {
+        text-align: left;
+    }
+    .float-right {
+        text-align: right;
+    }
+    .business-card-row {
+        display: block;
+        text-align: center;
+    }
+
+    .business-card-row:nth-child(2) {
+        margin: 35px 0 50px 0;
+    }
+    .business-card-big {
+        font-size: 150%;
+    }
+
+    .business-card-med {
+        font-size: 100%;
+        letter-spacing: 0.5px;
+    }
+
+    .business-card-small {
+        font-size: 65%;
+        letter-spacing: 0.5px;
+    }
+
+    .business-card-no-space {
+        letter-spacing: 0px;
+    }
+}
 
 /* Project-specific CSS */
 
