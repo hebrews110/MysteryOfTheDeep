@@ -4,6 +4,8 @@
 import "core-js/stable";
 import "regenerator-runtime/runtime";
 
+import asyncLib from 'async';
+
 import './external/import-jquery';
 
 import './external/jquery.svg.min';
@@ -1109,6 +1111,7 @@ namespace GameTools {
             const element: FinderItem = $component.data("element");
             if(Finder.isLinkedItem(element)) {
                 let item: DisplayedItem = await toDisplayedItem(element.link, null);
+                item.displayNext = async function(){};
                 item.once("undisplay", () => {
                     this.parent.displayNext();
                 });
@@ -1443,21 +1446,30 @@ namespace GameTools {
             await super.display();
             let conditionVal: T = getValue(this.value);
             let defaultCase: DefaultSwitchCase<T> = null;
-            let wasHandled = this.cases.some((val: (SwitchCase<T>)) => {
-                if((val as DefaultSwitchCase<T>).default === undefined && Switch.valueMatches<T>(val.caseValue, conditionVal)) {
-                    (val as BaseSwitchCase<T>).handler(conditionVal);
-                    return true;
-                } else if((val as DefaultSwitchCase<T>).default === true) {
-                    if(defaultCase != null)
-                        throw "Multiple default cases";
-                    else
-                        defaultCase = (val as DefaultSwitchCase<T>);
-                }
-                return false;
+            let wasHandled: boolean;
+            await new Promise((resolve) => {
+                asyncLib.some(this.cases, async(val: (SwitchCase<T>), callback) => {
+                    if((val as DefaultSwitchCase<T>).default === undefined && Switch.valueMatches<T>(val.caseValue, conditionVal)) {
+                        await (val as BaseSwitchCase<T>).handler(conditionVal);
+                        callback(null, true);
+                        return;
+                    } else if((val as DefaultSwitchCase<T>).default === true) {
+                        if(defaultCase != null)
+                            throw "Multiple default cases";
+                        else
+                            defaultCase = (val as DefaultSwitchCase<T>);
+                    }
+                    callback(null, false);
+                }, (err, result) => {
+                    wasHandled = result;
+                    resolve();
+                });
             });
+            
             if(!wasHandled && defaultCase != null) {
-                defaultCase.handler(conditionVal);
+                await defaultCase.handler(conditionVal);
             }
+            console.log("Exiting switch");
             this.displayNext();
         }
     }
@@ -2362,8 +2374,12 @@ let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
         </>
     }
 ]}/>);
+
+export function BusStop(props) {
+    return <><img src={require('./external/images/bus-stop.svg')}/>{props.children}</>;
+}
 let myArray = [
-    new GameTools.Loop({ index: "test" }),
+    new GameTools.Loop({ index: "day1_busstop" }),
     new GameTools.MultipleChoiceQuestion("Choose a chapter.", [
         { html: "Chapter 1" },
         { html: "Chapter 2" },
@@ -2400,11 +2416,22 @@ let myArray = [
         </>) }
     ], 0),
     new GameTools.Condition(GameTools.label(""), new GameTools.Loop({ index: -1 })),
-    GameTools.label("test", new GameTools.DialogueExperience(require('./external/atlantic.rive'), "Anna Atlantic", undefined, [
+    GameTools.label("", new GameTools.DialogueExperience(require('./external/atlantic.rive'), "Anna Atlantic", undefined, [
         "What are we solving today?",
         "Will we be working together?",
         "Where should I start?"
     ])),
+    GameTools.label("day1_busstop", new GameTools.ButtonFinder("Choose a bus stop.", "", [
+        <BusStop>Route 1</BusStop>,
+        <BusStop>Route 24</BusStop>,
+        <BusStop>Route 38</BusStop>,
+    ], GameTools.InfoBox.defaultDelay, () => "Choose a bus stop.")),
+    new GameTools.Switch<number>(() => GameTools.lastData, [
+        { caseValue: 0, handler: () => GameTools.startDisplay([
+            new GameTools.SetBackground(require('./external/images/airport.jpg')),
+            new GameTools.InfoBox("Airport Closed", "Unfortunately, the airport is closed today.")
+        ]) }
+    ]),
 
 ];
 let notebookList = [

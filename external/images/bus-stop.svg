@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="388.52402"
+   height="391.4762"
+   version="1.1"
+   id="svg11"
+   sodipodi:docname="bus-stop.svg"
+   inkscape:version="0.92.4 (5da689c313, 2019-01-14)">
+  <defs
+     id="defs15" />
+  <sodipodi:namedview
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="1920"
+     inkscape:window-height="1017"
+     id="namedview13"
+     showgrid="false"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0"
+     inkscape:zoom="1.3641449"
+     inkscape:cx="187.01235"
+     inkscape:cy="200.99128"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg11" />
+  <title
+     id="title2">Bus Stop (Transit)</title>
+  <metadata
+     id="metadata18081">image/svg+xmlPublic Domainclker.comMohamed Ibrahimmap symbolsmap symbolsimage/svg+xmlMap SymbolsMohamed IbrahimPublic Domain Licenseclker.commap symbols<rdf:RDF>
+  <cc:Work
+     rdf:about="">
+    <dc:format>image/svg+xml</dc:format>
+    <dc:type
+       rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+    <dc:title>Bus Stop (Transit)</dc:title>
+  </cc:Work>
+</rdf:RDF>
+</metadata>
+  <path
+     style="fill:#0054d0;fill-rule:nonzero;fill-opacity:1"
+     inkscape:connector-curvature="0"
+     id="path6762"
+     d="m 342.13548,391.4762 c 25.63162,0 46.38855,-20.87714 46.38855,-46.70618 V 46.785399 C 388.52403,20.95637 367.7671,0 342.13548,0 H 46.4279 C 20.79625,0 0,20.95637 0,46.785399 V 344.77002 c 0,25.82904 20.79625,46.70618 46.4279,46.70618 z" />
+  <path
+     style="fill:#ffffff;fill-rule:nonzero;fill-opacity:1"
+     inkscape:connector-curvature="0"
+     id="path6764"
+     d="M 322.26195,73.820407 C 318.53264,55.269443 306.67528,47.858611 288.84147,40.447791 271.00767,32.989139 229.26796,24.14395 198.1425,24.14395 c -31.17331,0 -72.91299,8.845188 -90.7468,16.303841 C 89.5619,47.858619 77.70457,55.269442 73.97523,73.820407 L 60.58793,176.71143 v 141.76196 h 23.09311 v 22.23249 c 0,27.06152 39.68378,27.06152 39.68378,0 v -22.23249 h 149.60315 v 22.23249 c 0,27.06152 39.58816,27.06152 39.58816,0 v -22.23249 h 23.04529 V 176.71143 L 322.26194,73.820407 Z M 135.89152,46.85456 h 124.40631 c 12.23984,0 12.23984,23.188717 0,23.188717 H 135.89152 c -12.19201,0 -12.19201,-23.188717 0,-23.188717 M 103.47511,275.9209 c -11.52264,0 -20.89374,-9.3233 -20.89374,-20.94156 0,-11.52264 9.3711,-20.89377 20.89374,-20.89377 11.57047,0 20.94159,9.37113 20.94159,20.89377 0,11.61826 -9.37112,20.94156 -20.94159,20.94156 m 189.28693,0 c -11.57047,0 -20.98938,-9.3233 -20.98938,-20.94156 0,-11.52264 9.41891,-20.89377 20.98938,-20.89377 11.47482,0 20.84598,9.37113 20.84598,20.89377 0,11.61826 -9.37116,20.94156 -20.84598,20.94156 m 8.22363,-88.3562 H 95.53837 c -5.9765,0 -10.94891,-4.97244 -10.94891,-10.94891 0,-1.00406 0.19125,-1.9603 0.38248,-2.86872 l 10.94891,-81.1366 c 0.90842,-5.06804 5.40274,-8.988641 10.70984,-8.988641 h 183.21484 c 5.3071,0 9.8014,3.920601 10.75763,8.988641 l 10.9011,81.1366 c 0.19128,0.90845 0.3825,1.86466 0.3825,2.86872 0,5.97647 -4.92462,10.94891 -10.90109,10.94891" />
+</svg>
