@@ -6,6 +6,8 @@ import "regenerator-runtime/runtime";
 
 import asyncLib from 'async';
 
+import dot from 'dot';
+
 import './external/import-jquery';
 
 import './external/jquery.svg.min';
@@ -48,7 +50,7 @@ import BrowserDetect from './components/browserdetect.js';
 
 import RiveScript from './node_modules/rivescript/lib/rivescript.js';
 
-import { toggleInputDisabled, toggleMsgLoader, addResponseMessage, Widget, dropMessages } from './components/chat/index.js';
+import { toggleInputDisabled, toggleMsgLoader, addResponseMessage, addUserMessage, Widget, dropMessages } from './components/chat/index.js';
 
 import moment from 'moment';
 
@@ -64,14 +66,13 @@ import ClipLoader from 'react-spinners/ClipLoader';
 
 import Emitter from 'component-emitter';
 
-require('velocity-animate');
-
 
 namespace GameTools {
     export let helpRef: React.RefObject<any>;
     let helpShown: boolean;
     let reactedSet: Set<HTMLElement>;
     let visibleStack: DisplayedItem[];
+    export const SPEED_HACK: boolean = true;
     (function($) {
         $.fn.randomize = function(childElem) {
             function shuffle(o) {
@@ -108,7 +109,7 @@ namespace GameTools {
     export let lastResult: boolean = false;
     export let lastData: any = null;
     type GameArrayFunctionItem = () => GameArrayItem;
-    type GameArrayItem = DisplayedItem|GameArrayFunctionItem;
+    export type GameArrayItem = DisplayedItem|GameArrayFunctionItem;
     export interface GameArray extends Array<GameArrayItem> {
         contentsIndex?: number;
         indexPollers?: Array<() => void>;
@@ -295,23 +296,26 @@ namespace GameTools {
                 }, 0);
             }, 0);
         }
+        protected async moveToNext() {
+            let item = this.getNextItem();
+            if(item != null) {
+                let err = new Error("The item following this one did not call super.display()!");
+                setTimeout(async () => {
+                    let realItem = await toDisplayedItem(item, this.getParentArray());
+                    await realItem.display();
+                    if(realItem.autoWakePollers)
+                        wakeUpPollers(realItem.getParentArray());
+                    if(!realItem._isDisplaying)
+                        throw err;
+                }, 0);
+            }
+        }
         public async displayNext() {
             setTimeout(async () => {
                 await this.undisplay();
                 if(this._isDisplaying)
                     throw new Error("This item did not call super.undisplay()!");
-                let item = this.getNextItem();
-                if(item != null) {
-                    let err = new Error("The item following this one did not call super.display()!");
-                    setTimeout(async () => {
-                        let realItem = await toDisplayedItem(item, this.getParentArray());
-                        await realItem.display();
-                        if(realItem.autoWakePollers)
-                            wakeUpPollers(realItem.getParentArray());
-                        if(!realItem._isDisplaying)
-                            throw err;
-                    }, 0);
-                }
+                await this.moveToNext();
             }, 0);
         }
         async reset() {
@@ -393,7 +397,14 @@ namespace GameTools {
 
         }
         public buttonCallback(e: JQuery.ClickEvent): void {
+            console.log("InfoBox button callback");
             this.displayNext();
+        }
+        protected addCloseButton() {
+            let close_button = $("<button></button>").addClass("close").attr({ "aria-label": "Close"});
+            close_button.append($("<span></span>").attr("aria-hidden", "true").html("&times;"));
+            close_button.click(this.buttonCallback.bind(this));
+            this.$dialog.find(".modal-header").append(close_button);
         }
         async undisplay() {
             await new Promise((resolve) => {
@@ -591,7 +602,7 @@ namespace GameTools {
                     resolve();
                 });
             });
-            
+            await super.dialogCreated();
         }
     }
     export class Delay extends DisplayedItem {
@@ -844,19 +855,39 @@ namespace GameTools {
         buttonCallback(e: JQuery.ClickEvent): void {
             var $itemsDiv = this.$dialog.find(".modal-body .items-div");
             var $targetsDiv =  this.$dialog.find(".modal-body .targets-div");
-            if(!DragTargetsQuestion.alwaysBeRight && $itemsDiv.children().length > 0) {
-                GameTools.lastResult = false;
-            } else {
-                var $dragItems = $targetsDiv.find(".drag-item");
-                GameTools.lastResult = true;
-                if(!DragTargetsQuestion.alwaysBeRight)
-                    $dragItems.each((index, element): false | void => {
-                        if(!($(element).data("target") as JQuery<HTMLElement>).is($(element).parent())) {
-                            GameTools.lastResult = false;
-                            return false;
+
+            var $targets = $targetsDiv.find(".target");
+            GameTools.lastResult = true;
+            if(!DragTargetsQuestion.alwaysBeRight) {
+                $targets.each((index, element): false | void => {
+                    const myName = $(element).find("span").text();
+                    let containedItems = new Set<string>();
+                    this.items.forEach((item) => {
+                        if(item.target !== undefined && item.target == myName) {
+                            containedItems.add(getValue(item.name));
                         }
                     });
+                    $(element).children().each((index, child): false | void => {
+                        if(!$(child).hasClass("drag-item")) {
+                            return; /* Skip question mark and span */
+                        }
+                        let childText = $($(child).children().get(0)).text();
+                        if(!containedItems.has(childText)) {
+                            GameTools.lastResult = false;
+                            return false;
+                        } else {
+                            containedItems.delete(childText);
+                        }
+                    });
+                    if(GameTools.lastResult == false)
+                        return false;
+                    if(containedItems.size > 0) {
+                        GameTools.lastResult = false;
+                        return false;
+                    }
+                });
             }
+
             super.buttonCallback(e);
         }
         async dialogCreated() {
@@ -874,34 +905,39 @@ namespace GameTools {
             $bothDivs.addClass("dragtargets-div");
             $targetsDiv.addClass("targets-div");
             $itemsDiv.addClass("items-div");
+            const targetNames = new Map<string, HTMLElement>();
             this.items.forEach(item => {
                 const target = item.target;
                 let $targetDiv = null;
                 if(target != null && target != undefined) {
-                    let $span = $("<span></span>");
-                    getValue(target, $span.get(0));
-                    let $div = $("<div></div>").append($span).addClass("target");
-                    $div.data("my-text", target);
-                    $targetsDiv.append($div);
-                    $div.append($("<i></i>").addClass("fas fa-question-circle").click(function() {
-                        var $target = $(this).parent();
-                        cancelTooltipTimeout($target);
-                        $target.tooltip('show');
-                        $target.data("tooltip-timeout", setTimeout(() => {
-                            $target.tooltip('hide');
-                        }, 3000));
-                    }));
-                    $div.children("i").hide();
-    
-    
-                    $targetDiv = $div;
-                    
-                    
-                    $targetDiv.attr("title", $targetDiv.data("my-text"));
-                    $targetDiv.tooltip({
-                        html: true
-                    });
-                    $targetDiv.tooltip('disable');
+                    if(!targetNames.has(getValue(target))) {
+                        let $span = $("<span></span>");
+                        getValue(target, $span.get(0));
+                        let $div = $("<div></div>").append($span).addClass("target");
+                        $div.data("my-text", target);
+                        $targetsDiv.append($div);
+                        $div.append($("<i></i>").addClass("fas fa-question-circle").click(function() {
+                            var $target = $(this).parent();
+                            cancelTooltipTimeout($target);
+                            $target.tooltip('show');
+                            $target.data("tooltip-timeout", setTimeout(() => {
+                                $target.tooltip('hide');
+                            }, 3000));
+                        }));
+                        $div.children("i").hide();
+                        targetNames.set(getValue(target), $div.get(0));
+        
+                        $targetDiv = $div;
+                        
+                        
+                        $targetDiv.attr("title", $targetDiv.data("my-text"));
+                        $targetDiv.tooltip({
+                            html: true
+                        });
+                        $targetDiv.tooltip('disable');
+                    } else {
+                        $targetDiv = $(targetNames.get(getValue(target)));
+                    }
                 }
                 const backColor = HSLToHex(getRandomInt(0, 360), 100, 90);
                 let $div = $("<div></div>").addClass("drag-item").data("target", $targetDiv).css({
@@ -1101,7 +1137,7 @@ namespace GameTools {
             let b_item = item as FinderLinkedItem<T>;
             return (b_item.button != undefined && b_item.link != undefined);
         }
-        async itemFound($component: JQuery<any>) {
+        async itemFound($component: JQuery<any>): Promise<boolean> {
             
             if(this.itemIndexes.indexOf($component.data("index")) == -1) {
                 this.itemsFound++;
@@ -1109,18 +1145,22 @@ namespace GameTools {
             }
             this.$componentFound = $component;
             const element: FinderItem = $component.data("element");
-            if(Finder.isLinkedItem(element)) {
-                let item: DisplayedItem = await toDisplayedItem(element.link, null);
-                item.displayNext = async function(){};
-                item.once("undisplay", () => {
+            return new Promise(async(resolve) => {
+                if(Finder.isLinkedItem(element)) {
+                    let item: DisplayedItem = await toDisplayedItem(element.link, null);
+                    item.displayNext = (async function(){
+                        await this.undisplay();
+                    }).bind(item);
+                    item.once("undisplay", () => {
+                        this.parent.displayNext();
+                        resolve(false);
+                    });
+                    item.display();
+                } else {
                     this.parent.displayNext();
-                });
-                item.display();
-                return true;
-            } else {
-                this.parent.displayNext();
-                return false;
-            }
+                    resolve(false);
+                }
+            });
         }
         finished(): boolean {
             return this.itemsFound == this.numItems;
@@ -1147,10 +1187,17 @@ namespace GameTools {
         finder: Finder;
         didDisplay = false;
         foundIndexes: number[];
-        constructor(title: GameValue<string>, public instructions: GameValue<string>, public buttons: FinderItem[], public delay = InfoBox.defaultDelay, template?: FinderTemplate) {
+        closeButtonShown: boolean;
+        constructor(title: GameValue<string>, public instructions: GameValue<string>, public buttons: FinderItem[], public delay = InfoBox.defaultDelay, protected userTemplate: FinderTemplate = Finder.defaultTemplate) {
             super(title, instructions, null, delay);
-            this.finder = new Finder(this, buttons.length, template);
+            this.finder = new Finder(this, buttons.length, this.finderTemplate.bind(this));
             this.foundIndexes = [];
+        }
+        protected finderTemplate(itemsFound: number, totalItems: number): string {
+            let userString = this.userTemplate(itemsFound, totalItems);
+            if(!this.closeButtonShown)
+                return userString;
+            return userString + " You can now close the dialog.";
         }
         async reset() {
             if(this.finder != null)
@@ -1158,12 +1205,10 @@ namespace GameTools {
             await super.reset();
             this.foundIndexes = [];
             this.didDisplay = false;
+            this.closeButtonShown = false;
         }
         async displayNext() {
-            if(this.didDisplay)
-                GameTools.lastResult = false;
-            else
-                GameTools.lastResult = this.finder.finished();
+            GameTools.lastResult = this.finder.finished();
             GameTools.lastData = this.finder.$componentFound.data("index");
             await super.displayNext();
         }
@@ -1203,8 +1248,16 @@ namespace GameTools {
                 $button.click(async(e) => {
                     $finderButtons.children("button").prop("disabled", true);
                     this.foundIndexes.push($(e.target).data("index"));
-                    if(await this.finder.itemFound($(e.target)))
+                    if(await this.finder.itemFound($(e.target))) {
                         $finderButtons.children("button").prop("disabled", false);
+                        await this.dialogCreated();
+                        if(this.finder.finished()) {
+                            console.log("Adding close button");
+                            this.addCloseButton();
+                            this.closeButtonShown = true;
+                            this.finder.setTitle();
+                        }
+                    }
                 });
                 $finderButtons.append($button);
             });
@@ -1273,7 +1326,7 @@ namespace GameTools {
     }
     export class MultipleChoiceQuestion extends InfoBox {
         readonly isQuestion: boolean;
-        constructor(question: GameValue<string>, protected choices: QuestionOption[], protected shouldReDisplay = false, style?: StylisticOptions) {
+        constructor(question: GameValue<string>, protected choices: QuestionOption[], protected shouldReDisplay = true, style?: StylisticOptions, protected instructions: GameValue<string> = "") {
             super(question, "", null, InfoBox.defaultDelay, style);
             this.isQuestion = choices.some((choice: QuestionOption) => {
                 return choice.correct;
@@ -1286,7 +1339,12 @@ namespace GameTools {
             GameTools.lastData = this.choices.indexOf(option);
             if(!this.isQuestion || option.correct) {
                 GameTools.lastResult = true;
-                this.displayNext();
+                await this.undisplay();
+                let box = new InfoBox("That's right!", <p>
+                    The correct answer was: <b>{option.html}</b>
+                </p>, "OK", InfoBox.defaultDelay);
+                await box.display();
+                box.once("undisplay", () => this.moveToNext());
             } else {
                 GameTools.lastResult = false;
                 this.title = "Sorry, that wasn't the correct answer.";
@@ -1296,9 +1354,17 @@ namespace GameTools {
                     this.displayNext();
             }
         }
+        async display() {
+            console.log("Button finder display()");
+            await super.display();
+        }
         async dialogCreated() {
+            await super.dialogCreated();
             var $body = this.$dialog.find(".modal-body");
+            let $instructionsDiv = $("<div></div>").appendTo($body);
+            getValue(this.instructions, $instructionsDiv.get(0));
             var $finderButtons = $("<div></div>").addClass("finder-buttons").appendTo($body);
+            console.log("Button finder created");
             shuffle(this.choices, this.style.shouldShuffle).forEach((element, index) => {
                 var $button = $("<button></button>");
                 getValue(element.html, $button.get(0));
@@ -1447,10 +1513,11 @@ namespace GameTools {
             let conditionVal: T = getValue(this.value);
             let defaultCase: DefaultSwitchCase<T> = null;
             let wasHandled: boolean;
+            let shouldDisplayNext: boolean;
             await new Promise((resolve) => {
                 asyncLib.some(this.cases, async(val: (SwitchCase<T>), callback) => {
                     if((val as DefaultSwitchCase<T>).default === undefined && Switch.valueMatches<T>(val.caseValue, conditionVal)) {
-                        await (val as BaseSwitchCase<T>).handler(conditionVal);
+                        shouldDisplayNext = await (val as BaseSwitchCase<T>).handler(conditionVal);
                         callback(null, true);
                         return;
                     } else if((val as DefaultSwitchCase<T>).default === true) {
@@ -1467,10 +1534,15 @@ namespace GameTools {
             });
             
             if(!wasHandled && defaultCase != null) {
-                await defaultCase.handler(conditionVal);
+                shouldDisplayNext = await defaultCase.handler(conditionVal);
             }
-            console.log("Exiting switch");
-            this.displayNext();
+            if(shouldDisplayNext == undefined || shouldDisplayNext == null)
+                shouldDisplayNext = true; /* Will become false */
+
+            shouldDisplayNext = !shouldDisplayNext;
+            console.log("Exiting switch " + shouldDisplayNext);
+            if(shouldDisplayNext)
+                this.displayNext();
         }
     }
     export class Invoke extends DisplayedItem {
@@ -1634,7 +1706,9 @@ namespace GameTools {
             clearTimeout($(this.buttonRef.current).data("tooltipTimeout"));
         }
         componentDidMount() {
-            $(this.buttonRef.current).tooltip();
+            $(this.buttonRef.current).tooltip({
+                container: 'body'
+            });
             $(this.buttonRef.current).data("tooltipTimeout", null);
             $(this.buttonRef.current).on('shown.bs.tooltip', () => this.tooltipShown());
             $(this.buttonRef.current).on('hide.bs.tooltip', () => this.tooltipHide());
@@ -1815,6 +1889,13 @@ namespace GameTools {
             return <Widget showCloseButton={this.state.showCloseButton} {...rest}/>;
         }
     }
+    export enum MessageSender {
+        Player,
+        Character
+    }
+    export interface UserFunctionTable {
+        [funcName: string]: () => void;
+    }
     export class DialogueExperience extends ReactInfoBox {
         protected currentStatement;
         protected lastSeenTime: Date;
@@ -1823,16 +1904,44 @@ namespace GameTools {
         protected asked: Set<string>;
         protected allMessages: string[];
         protected widgetRef: React.RefObject<DialogueWidgetWrapper>;
-        protected endDialogueWhenMessageFinishes: boolean;
-        protected static doReenableInput: boolean = false;
+        public endDialogueWhenMessageFinishes: boolean;
+        public static doReenableInput: boolean = false;
         public static readonly builtinMessages = [
-            "Hi!",
-            "What's your name?"
         ];
         protected bot: RiveScript;
         async endDialogue() {
             await this.reset();
             this.displayNext();
+        }
+        public async sendMessage(reply: string, sender: MessageSender = MessageSender.Character) {
+            await new Promise(async(resolve) => {
+                let replies = reply.split('\n');
+                for(let index = 0; index < replies.length; index++) {
+                    if(replies[index].trim().length == 0)
+                        continue;
+                    if(sender == MessageSender.Character)
+                        toggleMsgLoader();
+
+                    if(!SPEED_HACK) {
+                        if(sender == MessageSender.Character)
+                            await sleep(replies[index].length*100);
+                        else
+                            await sleep(1000);
+                    }
+                    if(sender == MessageSender.Character) {
+                        toggleMsgLoader();
+                        addResponseMessage(replies[index]);
+                    } else
+                        addUserMessage(replies[index]);
+                    if(!SPEED_HACK) {
+                        await sleep(500);
+                    }
+                }
+                resolve();
+            });
+        }
+        public showCloseButton() {
+            this.widgetRef.current.setState({ showCloseButton: true });
         }
         async handleNewUserMessage(newMessage) {
             toggleInputDisabled();
@@ -1842,17 +1951,7 @@ namespace GameTools {
             this.momentRef.current.setState({ date: this.lastSeenTime});
             let reply = await this.bot.reply("local-user", newMessage, this);
             // Now send the message throught the backend API
-            await new Promise(async(resolve) => {
-                let replies = reply.split('\n');
-                for(let index = 0; index < replies.length; index++) {
-                    toggleMsgLoader();
-                    await sleep(replies[index].length*100);
-                    toggleMsgLoader();
-                    addResponseMessage(replies[index]);
-                    await sleep(500);
-                }
-                resolve();
-            });
+            await this.sendMessage(reply);
             
             this.asked.add(newMessage);
             let requiredQuestions = this.allowedMessages;
@@ -1862,7 +1961,7 @@ namespace GameTools {
             });
             toggleInputDisabled();
             if(!notDone) {
-                this.widgetRef.current.setState({ showCloseButton: true });
+                this.showCloseButton();
                 if(this.endDialogueWhenMessageFinishes) {
                     toggleInputDisabled();
                     DialogueExperience.doReenableInput = true;
@@ -1871,7 +1970,8 @@ namespace GameTools {
             
             
         }
-        constructor(protected riveFile: string, title?: string, avatar?: string, protected allowedMessages?: string[]) {
+        constructor(protected riveFile: string, title?: string, avatar?: string, protected allowedMessages?: string[],
+            protected messageFeeder?: (controller: DialogueExperience) => void, protected userFuncs: UserFunctionTable = {}) {
             super(null);
             this.lastSeenTime = new Date();
             this.mustAskAll = allowedMessages != undefined;
@@ -1900,6 +2000,11 @@ namespace GameTools {
                 toggleInputDisabled();
                 DialogueExperience.doReenableInput = false;
             }
+            if(this.messageFeeder != undefined)
+                this.messageFeeder(this);
+        }
+        async dialogDisplayed() {
+            await super.dialogDisplayed();
         }
         async reset() {
             this.endDialogueWhenMessageFinishes = false;
@@ -1912,13 +2017,13 @@ namespace GameTools {
             this.bot = new RiveScript({
                 concat: "newline"
             });
-            if(this.riveFile == null || this.riveFile == undefined)
-                throw new Error("Undefined riveFile");
-            
-            await this.bot.loadFile([
-                this.riveFile,
-                require('./components/chat/builtin.rive')
-            ]);
+            if(this.riveFile != null && this.riveFile != undefined) {
+                await this.bot.loadFile([
+                    this.riveFile,
+                    require('./components/chat/builtin.rive')
+                ]);
+            }
+
             console.log("Sorting!");
             this.bot.sortReplies();
             await super.reset();
@@ -1992,7 +2097,6 @@ namespace GameTools {
             this.shouldContinue = false;
         }
         stopAnimation() {
-            this.modal_content.find("img.velocity_animating").velocity("stop", true as unknown);
         }
         async undisplay() {
             this.shouldContinue = false;
@@ -2001,34 +2105,31 @@ namespace GameTools {
         }
         async animateNextImage() {
             await sleep(2000);
-            let $image = $("<img></img>").attr("src", this.randomImages[this.imageIndex]).attr("data-index", this.imageIndex);
+            let $image = $("<div></div>").css("background-image", `url(${this.randomImages[this.imageIndex]})`).attr("data-index", this.imageIndex);
             $image.css("z-index", getRandomInt(1, 15));
             this.images.append($image);
             let dimension = this.holeFinder.outerWidth();
             let invert = getRandomInt(0, 1) == 1 ? 1 : -1;
-            $.Velocity.hook($image, "scaleX", invert.toString());
-            $.Velocity.hook($image, "translateX", (-dimension) + "px");
+            $image.css("scaleX", invert.toString());
             $image.show();
             this.isAnimating = true;
             this.currentImage = $image.get(0) as HTMLImageElement;
             this.observer.observe(this.currentImage);
-            $image.velocity({ 
-                translateX: (dimension) + "px"
-            }, { 
-                duration: 1000,
-                delay: 0,
-                easing: "linear",
-                complete: () => {
-                    this.isAnimating = false;
-                    if(this.currentImage != null)
-                        this.observer.unobserve(this.currentImage);
-                    this.currentImage = null;
-                    this.currentRatio = 0;
-                    $image.remove();
-                    if(this.shouldContinue)
-                        this.animateNextImage();
-                }
-            });
+            const completeCallback = () => {
+                this.isAnimating = false;
+                if(this.currentImage != null)
+                    this.observer.unobserve(this.currentImage);
+                this.currentImage = null;
+                this.currentRatio = 0;
+                $image.remove();
+                if(this.shouldContinue)
+                    this.animateNextImage();
+            };
+            
+            $image.addClass("hole-finder-animate");
+
+            setTimeout(completeCallback, 1000);
+            
             this.newIndex();
         }
         static removeImageBlanks(imageObject: HTMLImageElement) {
@@ -2136,9 +2237,13 @@ namespace GameTools {
             this.modal_content.append(holeFinderContainer = $("<div></div>").addClass("hole-finder-container"));
             holeFinderContainer.append(this.holeFinder = $("<div></div>"));
             this.holeFinder.addClass("hole-finder " + this.customClasses);
+            
+            const bubbleContainer = $("<div></div>").addClass("bubble-container");
+            this.holeFinder.append(bubbleContainer);
             for(var i = 0; i < 50; i++) {
-                this.holeFinder.append($("<span class='bubble'></span>"));
+                bubbleContainer.append($("<span class='bubble'></span>"));
             }
+            
             this.images = $("<div></div>").addClass("hole-finder-images");
             this.holeFinder.append(this.images);
             let options = {
@@ -2259,6 +2364,7 @@ namespace GameTools {
             $button.on("click", (e) => {
                 this.numClicks++;
                 if(this.numClicks == 2) {
+                    this.numClicks = 0;
                     this.buttonCallback(e);
                 }
             });
@@ -2268,10 +2374,193 @@ namespace GameTools {
             });
         }
     }
+    export class Branch extends Loop {
+        async displayNext() {
+            /* Do NOT call super.displayNext(), this will do nothing */
+            let arr = this.getParentArray();
+            arr.contentsIndex++; /* simulate DisplayedItem.displayNext() */
+            setTimeout(async() => {
+                let item = await toDisplayedItem(arr[arr.contentsIndex], arr);
+                item.display();
+            }, 0);
+        }
+        async display() {
+            await super.display();
+        }
+    }
+    export function markdown_img(src: string, alt = "no_alt") {
+        return `![${alt}](${src})`;
+    }
+    export function toDataURI(svg_html: string|SVGElement): string {
+        if(svg_html instanceof SVGElement)
+            svg_html = svg_html.outerHTML;
+        const externalQuotesValue = "double";
+        const quotes = getQuotes();
+        const symbols = /[\r\n%#()<>?\[\\\]^`{|}]/g;
+        function addNameSpace( data ) {
+            if ( data.indexOf( 'http://www.w3.org/2000/svg' ) < 0 ) {
+                data = data.replace( /<svg/g, `<svg xmlns=${quotes.level2}http://www.w3.org/2000/svg${quotes.level2}` );
+            }
+        
+            return data;
+        }
+        function encodeSVG( data ) {
+            // Use single quotes instead of double to avoid encoding.
+            if ( externalQuotesValue === 'double') {
+                data = data.replace( /"/g, '\'' );
+            }
+            else {
+               data = data.replace( /'/g, '"' );
+            }
+        
+            data = data.replace( />\s{1,}</g, "><" );
+            data = data.replace( /\s{2,}/g, " " );
+        
+            return data.replace( symbols, encodeURIComponent );
+        }
+        
+        
+        // Get quotes for levels
+        //----------------------------------------
+        
+        function getQuotes() {
+            const double = `"`;
+            const single = `'`;
+        
+            return {
+                level1: externalQuotesValue === 'double' ? double : single,
+                level2: externalQuotesValue === 'double' ? single : double
+            };
+        }
+        return "data:image/svg+xml," + encodeSVG(addNameSpace(svg_html));
+    }
+    export function patchSVGLayers(svg: SVGElement, visibleLayers?: string[]) {
+        if(visibleLayers == undefined || visibleLayers == null || visibleLayers.length == 0)
+            return;
+        let svgGroups = svg.querySelectorAll('g');
+        svgGroups.forEach((group) => {
+            let groupMode = group.getAttribute('inkscape:groupmode');
+            if(groupMode != "layer")
+                return;
+            let layerName = group.getAttribute("inkscape:label");
+            if(layerName != null && layerName != "") {
+                if(visibleLayers.indexOf(layerName) == -1)
+                    group.setAttribute("visibility", "hidden");
+            }
+        });
+    }
+    export class ZoomableSVG extends React.Component<{ src: string; visibleLayers?: string[]; extraClasses?: string; style?: React.CSSProperties; }, {svg_html: string; }> {
+        imgRef: React.RefObject<HTMLDivElement>;
+        constructor(props) {
+            super(props);
+            this.state = { svg_html: null };
+            this.imgRef = React.createRef();
+        }
+        makeMagnific(img, add = true) {
+            if(img == null)
+                return;
+            if(add) {
+                let svg = $(img).find("svg").get(0) as SVGElement;
+                patchSVGLayers(svg, this.props.visibleLayers);
+                try {
+                    let str = new XMLSerializer().serializeToString(svg);
+                    console.log("Successfully serialized");
+                    let deserialized = new DOMParser().parseFromString(str, "text/xml");
+                    console.log("Successfully deserialized");
+                } catch(e) {
+                    /* Probably IE having a fit */
+                    console.log("Detected SVG load failure, bailing");
+                    $(img).removeClass("gt-preview-image gt-svg-preview-image mfp-popup-wrapper");
+                    return;
+                }
+                const uri = toDataURI($(img).html());
+                ($(img) as any).magnificPopup({
+                    items: {
+                        src: uri
+                    },
+                    type: 'image'
+                });
+            } else {
+                $(img).off('click');
+                $(img).removeData('magnificPopup');
+            }
+            
+        }
+        componentDidMount() {
+            this.makeMagnific(this.imgRef.current);
+        }
+        componentWillUnmount() {
+            this.makeMagnific(this.imgRef.current, false);
+        }
+        componentDidUpdate() {
+            this.makeMagnific(this.imgRef.current);
+        }
+        render() {
+            if(this.state.svg_html != undefined && this.state.svg_html != null)
+                return <div style={this.props.style} ref={this.imgRef}
+                    className={"gt-preview-image gt-svg-preview-image mfp-popup-wrapper " + (this.props.extraClasses == undefined ? "" : this.props.extraClasses)}
+                    dangerouslySetInnerHTML={{ __html: this.state.svg_html}}></div>;
+            else {
+                $.get(this.props.src, (data) => {
+                    this.setState({ svg_html: data });
+                }, "text");
+                return null;
+            }
+        }
+    }
+    export function caesarShift(str: string, amount: number): string {
+
+        // Wrap the amount
+        if (amount < 0)
+            return caesarShift(str, amount + 26);
+    
+        // Make an output variable
+        var output = '';
+    
+        // Go through each character
+        for (var i = 0; i < str.length; i ++) {
+    
+            // Get the character we'll be appending
+            var c = str[i];
+    
+            // If it's a letter...
+            if (c.match(/[a-z]/i)) {
+    
+                // Get its code
+                var code = str.charCodeAt(i);
+    
+                // Uppercase letters
+                if ((code >= 65) && (code <= 90))
+                    c = String.fromCharCode(((code - 65 + amount) % 26) + 65);
+    
+                // Lowercase letters
+                else if ((code >= 97) && (code <= 122))
+                    c = String.fromCharCode(((code - 97 + amount) % 26) + 97);
+    
+            }
+    
+            // Append
+            output += c;
+    
+        }
+    
+        // All done!
+        return output;
+    
+    }
+    export function codeify(code: string) {
+        code = code.toUpperCase();
+        const punctRE = /[\u2000-\u206F\u2E00-\u2E7F\\'!"#$%&()*+,\-.\/:;<=>?@\[\]^_`{|}~]/g;
+        return code.replace(punctRE, '');
+    }
+    export function appendToArray<T>(array: T[], item: T): T {
+        array.push(item);
+        return item;
+    }
 }
 
 class CreatureCard extends GameTools.InfoBox {
-    constructor(protected code: string, protected img: string, protected name: string, protected taxonomy: string, protected info: string) {
+    constructor(protected code: string, protected img: string, protected name: string, protected taxonomy: string, protected info: GameTools.GameValue<string>) {
         super("", "", "OK");
     }
     async dialogCreated() {
@@ -2284,7 +2573,9 @@ class CreatureCard extends GameTools.InfoBox {
         this.$content.append(leftDiv);
         let rightDiv = $("<div></div>");
         rightDiv.append("<h4>" + this.name + "</h4><h5>" + this.taxonomy + "</h5>");
-        rightDiv.append($("<span></span>").html(this.info));
+        const $infoDiv = $("<div></div>");
+        GameTools.getValue(this.info, $infoDiv.get(0));
+        rightDiv.append($infoDiv);
         this.$content.append(rightDiv);
     }
 }
@@ -2339,7 +2630,7 @@ let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
     },
     {
         headline: "Martin Mersenich Spots Fearsome Creature!",
-        subhead: <blockquote>This is 100% real!<footer>Martin Mesernich</footer></blockquote>,
+        subhead: <blockquote>This is 100% real!<footer>Martin Mersenich</footer></blockquote>,
         content: <>
            Martin Mersenich, a well-known figure in the community of Awakataka, has allegedly discovered what
            he believes to be the world's largest monster.
@@ -2365,7 +2656,6 @@ let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
         content: <>
             Due to unforeseen circumstances, bus service for the town of Awakataka will be reduced to the following routes only over the next week:
             <ul>
-                <li><b>Route 38:</b> PORPIS Rocket</li>
                 <li><b>Route 1:</b> Airport Rocket</li>
                 <li><b>Route 24:</b> Teddy Service (will only serve stops up to and including Salmon Hatchery)</li>
             </ul>
@@ -2375,11 +2665,47 @@ let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
     }
 ]}/>);
 
+let day2Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="Routine Rambler" articles={[
+    {
+        headline: "Tree Blocks Road to Airport",
+        content: <>
+            Residents of Awakataka will be unable to access the airport until very late this evening or tomorrow morning due
+            to a large tree blocking the only road.
+        </>
+    },
+    {
+        headline: "Whale Population Being Tracked",
+        content: <>
+            The local marine research centre, PORPIS, has announced that the whale population mentioned in our last broadcast
+            has been contaminated by a dangerous chemical. They believe that the whales are ingesting contaminated salmon.
+            <p></p>
+            When asked about who was investigating the case, a PORPIS spokesperson replied in an email:
+            <blockquote>We at PORPIS are actively tracking the situation. Please stay tuned for further replies.</blockquote>
+            <p></p>
+            Martin Mersenich stated that he was "doubtful of PORPIS' efforts":
+            <blockquote>PORPIS has no salmon facility, so they're going to stop working on this soon.
+                It would be really nice if someone useful was actually working on the case!</blockquote>
+        </>
+    }
+]}/>);
+
 export function BusStop(props) {
     return <><img src={require('./external/images/bus-stop.svg')}/>{props.children}</>;
 }
+
+let shift = 12; /* Code shift */
+
+let realCode = "They'll never find my secret or I'm not David G. Flounder.";
+
+let codedCode = GameTools.codeify(GameTools.caesarShift(realCode, shift));
+
+function getEquivalentCodeLetter(letter: string): string {
+    return `${letter}=${GameTools.caesarShift(letter, shift)}`;
+}
+
+let day1_notebookitems: GameTools.GameArrayItem[] = [];
 let myArray = [
-    new GameTools.Loop({ index: "day1_busstop" }),
+    new GameTools.Loop({ index: "day2_mapimage"}),
     new GameTools.MultipleChoiceQuestion("Choose a chapter.", [
         { html: "Chapter 1" },
         { html: "Chapter 2" },
@@ -2387,6 +2713,7 @@ let myArray = [
         { html: "Chapter 4" }
     ], false, { shouldColorBackgrounds: false, shouldShuffle: false }),
     new GameTools.Loop({ index: () => "chapter" + (GameTools.lastData + 1)}),
+    // ---------------------------- CHAPTER 1 --------------------------------
     GameTools.label("chapter1"),
     new GameTools.SetBackground(require('./external/images/office.svg')),
     new GameTools.ButtonFinder("Explore Anna Atlantic's office!", "", [
@@ -2421,23 +2748,312 @@ let myArray = [
         "Will we be working together?",
         "Where should I start?"
     ])),
-    GameTools.label("day1_busstop", new GameTools.ButtonFinder("Choose a bus stop.", "", [
+    GameTools.label("day1_busstop"),
+    new GameTools.SetBackground(require('./components/city.svg')),
+    new GameTools.ButtonFinder("Choose a bus stop.", "", [
         <BusStop>Route 1</BusStop>,
         <BusStop>Route 24</BusStop>,
-        <BusStop>Route 38</BusStop>,
-    ], GameTools.InfoBox.defaultDelay, () => "Choose a bus stop.")),
+        <><img src={require('./components/back_button.svg')}/>Go back to Anna's office</>,
+    ], GameTools.InfoBox.defaultDelay, () => "Choose a bus stop."),
     new GameTools.Switch<number>(() => GameTools.lastData, [
         { caseValue: 0, handler: () => GameTools.startDisplay([
             new GameTools.SetBackground(require('./external/images/airport.jpg')),
-            new GameTools.InfoBox("Airport Closed", "Unfortunately, the airport is closed today.")
-        ]) }
+            new GameTools.InfoBox("Airport Closed", "There are no flights leaving the airport today."),
+            () => new GameTools.Branch({ index: "day1_busstop"}).setParentArray(myArray)
+        ]) },
+        { caseValue: 1, handler: () => GameTools.startDisplay([
+            new GameTools.SetBackground(require('./external/images/secure_building.svg')),
+            new GameTools.InfoBox("Sign", "A sign outside a heavily secured and guarded building says that visitors are unwelcome today."),
+            () => new GameTools.Branch({ index: "day1_busstop"}).setParentArray(myArray)
+        ]) },
+        { caseValue: 2, handler: () => new GameTools.Branch({ index: "day1_porpis" }).setParentArray(myArray).display() },
     ]),
-
+    GameTools.label("day1_porpis"),
+    new GameTools.SetBackground(require('./external/images/office.svg')),
+    new GameTools.DialogueExperience(require('./external/porpis.rive'), "PORPIS", undefined, [
+        "Why would the toxins cause problems?",
+        "Can we find out what the whales eat?"
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Hey!\nWe heard that you're trying to find out why the killer whale population is acting strange?");
+        await controller.sendMessage("Yeah! I'm thinking that there might be some toxic barrels in the strait. Here's what they look like!", GameTools.MessageSender.Player);
+        await controller.sendMessage(GameTools.markdown_img(require('./external/images/barrels.png')), GameTools.MessageSender.Player);
+        await controller.sendMessage("Awesome! This picture will provide us with very valuable information!");
+        await controller.sendMessage("These barrels could be releasing dangerous toxins into the ocean water, which could cause problems for the whales.");
+        toggleInputDisabled();
+    }),
+    GameTools.label("foodweb_question"),
+    new GameTools.DragTargetsQuestion("Drag the items on the right to the appropriate targets on the left.", [
+        { name: "Blue Whale", target: "What eats plankton?" },
+        { name: "Herring", target: "What eats plankton?" },
+        { name: "Seal", target: "What eats herring?" },
+        { name: "Salmon", target: "What eats herring?" },
+        { name: "Seal", target: "What eats salmon?" },
+        { name: "Transient Killer Whale", target: "What eats seals?" },
+        { name: "Resident Killer Whale", target: "What eats salmon?"},
+    ], true, true, true, GameTools.InfoBox.defaultDelay),
+    new GameTools.Condition(new GameTools.Loop({ index: "foodweb_correct"}), GameTools.label("")),
+    new GameTools.InfoBox("Whoops!", "It looks like something wasn't quite right with that. Read your field guide carefully and try again!"),
+    new GameTools.Loop({ index: "foodweb_question"}),
+    GameTools.label("foodweb_correct"),
+    new GameTools.DialogueExperience(null, "PORPIS", undefined, [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("You must know what you're doing!\nLooks like you know enough to help us look for the contaminated whale population.\nThat way we can find the source of the toxins.\n");
+        await controller.sendMessage("You'll be in charge of the camera.\nWhen you see a whale swimming past, click/touch/tap/do whatever you need to do to get a picture of it!");
+        await controller.sendMessage("Let's get started as soon as possible! We don't have a lot of time...");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    GameTools.label('whale_finder'),
+    new GameTools.SetBackground(null),
+    new GameTools.HoleFinder([
+        require('./external/images/whale.svg'),
+        require('./external/images/seaweed.png'),
+        require('./external/images/diver.svg'),
+        require('./external/images/generic_fish.png'),
+        require('./external/images/bottle.png')
+    ], "water-hole-finder"),
+    new GameTools.DialogueExperience(null, "PORPIS", undefined, [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Nice work!\nWhen you get back to your office we should have the results ready.");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    GameTools.label('found_whale'),
+    new GameTools.SetBackground(require('./external/images/office.svg')),
+    new GameTools.MultipleChoiceQuestion("Which of these whale pods has the highest level of contamination?", [
+        { html: "Pod A" },
+        { html: "Pod B", correct: true },
+        { html: "Pod C" }
+    ], true, undefined, <GameTools.ZoomableSVG src={require('./external/images/map.svg')} visibleLayers={[ "Basemap", "Layer 1"]}/>),
+    new GameTools.DialogueExperience(null, "PORPIS", undefined, [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Yep, the pod that the whale you discovered belongs to seems to be the most contaminated.");
+        await controller.sendMessage("It looks like your theory may be right.");
+        await controller.sendMessage("We need to find those barrels as soon as possible, before they contaminate more animals.");
+        await controller.sendMessage("One more thing: can you answer another question for us?");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    new GameTools.MultipleChoiceQuestion("What do resident killer whales eat?", [
+        { html: "Seals" },
+        { html: "Salmon", correct: true },
+        { html: "Plankton" }
+    ]),
+    new GameTools.DialogueExperience(null, "PORPIS", undefined, [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("That's right.\nToo bad we at PORPIS don't have a salmon facility.");
+        await controller.sendMessage("Wait!\nThere's this salmon expert that I know from a long way back.");
+        await controller.sendMessage("Let me give you their contact information.");
+        await controller.sendMessage("Also, I have this card that your boss, Anna gave to me a while ago. Maybe it would be useful.");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    GameTools.label("firstCreatureCard"),
+    GameTools.appendToArray(day1_notebookitems, () => new CreatureCard(`${getEquivalentCodeLetter('Y')} ${getEquivalentCodeLetter('Z')}`, require('./external/images/sunflowerstar.jpg'), "Sunflower star", "Pycnopedia helianthoides", <p>
+        The sunflower star is a large sea star found in the northeast Pacific. The only species of its genus, it is among the largest sea stars in the world (but not quite the largest),
+        with a maximum arm span of 1 m (3.3 ft). Sunflower sea stars usually have 16 to 24 limbs; their color can vary widely. They are predatory, feeding mostly on sea urchins,
+        clams, snails, and other small invertebrates. Although the species had been widely distributed throughout the northeast Pacific, its population has rapidly declined since 2013.
+    </p>)),
+    GameTools.label("finalday1chat"),
+    new GameTools.DialogueExperience(require('./external/atlantic.rive'), "Anna Atlantic", undefined, [
+        "I talked to PORPIS, and we think that the barrels are contaminating the local salmon.",
+        "We think this is linked to the whales that the news was talking about this morning.",
+        "It's getting late. I should go.",
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Hey Ace! How's it going?");
+        toggleInputDisabled();
+    }, {
+        "getMessage": () => codedCode
+    }),
+    // ---------------------------- CHAPTER 2 --------------------------------
+    GameTools.label("chapter2"),
+    new GameTools.SetBackground(require('./external/images/office.svg')),
+    new GameTools.ButtonFinder("Explore Anna Atlantic's office!", "", [
+        { button: <>
+            <img src={require('./external/images/newspaper.svg')}/>
+            Newspaper on table
+        </>, link: day2Newspaper },
+        { button: <>
+            <img src={require('./external/images/business-card.svg')}/>
+            Business card
+        </>, link: new GameTools.BusinessCard(<>
+            <div className="business-card-row clearfix">
+                <div className="float-left business-card-big">1-800-WISEGUY</div>
+            </div>
+            <div className="business-card-row">
+                <p><span className="business-card-big">D</span>r <span className="business-card-big">S</span>alman <span className="business-card-big">W</span>ise, <span className="business-card-big">P</span>h.D </p>
+            </div>
+            <div className="business-card-row">
+                <span className="business-card-small">Expert on all things salmon. Phone to book a meeting.</span>
+            </div>
+        </>) }
+    ], 0),
+    new GameTools.Condition(GameTools.label(""), new GameTools.Loop({ index: -1 })),
+    GameTools.label("day2_busstop"),
+    new GameTools.SetBackground(require('./components/city.svg')),
+    new GameTools.ButtonFinder("Choose a bus stop.", "", [
+        <BusStop>Route 1</BusStop>,
+        <BusStop>Route 24</BusStop>,
+        <><img src={require('./components/back_button.svg')}/>Go back to Anna's office</>,
+    ], GameTools.InfoBox.defaultDelay, () => "Choose a bus stop."),
+    new GameTools.Switch<number>(() => GameTools.lastData, [
+        { caseValue: 0, handler: () => GameTools.startDisplay([
+            new GameTools.SetBackground(require('./external/images/road.svg')),
+            new GameTools.InfoBox("Road Closed", "Due to a fallen tree ahead, this bus will not serve the airport."),
+            () => new GameTools.Branch({ index: "day2_busstop"}).setParentArray(myArray)
+        ]) },
+        { caseValue: 1, handler: () => new GameTools.Branch({ index: "day2_wise" }).setParentArray(myArray).display() },
+        { caseValue: 2, handler: () => GameTools.startDisplay([
+            new GameTools.SetBackground(require('./external/images/office.svg')),
+            new GameTools.DialogueExperience(null, "PORPIS", undefined, [
+            ], async(controller) => {
+                toggleInputDisabled();
+                await controller.sendMessage("This is an automated response.\nThe PORPIS team is busy and unable to respond to your messages at this time.");
+                GameTools.DialogueExperience.doReenableInput = true;
+                controller.showCloseButton();
+            }),
+            () => new GameTools.Branch({ index: "day2_busstop"}).setParentArray(myArray)
+        ]) },
+    ]),
+    GameTools.label("day2_wise"),
+    new GameTools.SetBackground(require('./external/images/secure_building_guarded.svg')),
+    new GameTools.InfoBox("Security guards", <>
+        <p>Soooo... you want to talk to Dr. Wise?</p>
+        <p>Well, we might let you in... if you pass this quiz.</p>
+        <p>If you are confused, check your field guide for information.</p>
+    </>),
+    GameTools.label("day2_wisequiz"),
+    new GameTools.MultipleChoiceQuestion("Oncorhynchus means...", [
+        { html: "hook-nose", correct: true },
+        { html: "color-changing" },
+        { html: "needs to perform again" }
+    ], true),
+    new GameTools.MultipleChoiceQuestion("Most salmon have an anadromous lifestyle, meaning...", [
+        { html: "They live in freshwater and saltwater, but breed in saltwater", correct: true },
+        { html: "They mate with fish they've never seen before" },
+        { html: "They live in freshwater and saltwater, but breed in freshwater" }
+    ], true),
+    new GameTools.MultipleChoiceQuestion("What is an alevin?", [
+        { html: "A small chipmunk with a squeaky voice" },
+        { html: "A tiny salmon right after it hatches", correct: true },
+        { html: "A nest of salmon eggs" }
+    ]),
+    new GameTools.MultipleChoiceQuestion("The early freshwater phase of the coho salmon can be as long as...", [
+        { html: "Three weeks" },
+        { html: "TWo years", correct: true },
+        { html: "The time it takes to eat one of Tall Teddy's Tasty Treats" }
+    ]),
+    new GameTools.MultipleChoiceQuestion("Parr marks help salmon...", [
+        { html: "Blend in with the gravel", correct: true },
+        { html: "Play golf", },
+        { html: "Attract mates" }
+    ]),
+    new GameTools.MultipleChoiceQuestion("Chinook salmon can jump as high as..", [
+        { html: "Three meters", correct: true },
+        { html: "One meter", },
+        { html: "The height of Niagara Falls" }
+    ]),
+    new GameTools.MultipleChoiceQuestion("How many eggs can a sockeye salmon lay?", [
+        { html: "4000", correct: true },
+        { html: "40", },
+        { html: "400" }
+    ]),
+    new GameTools.MultipleChoiceQuestion("Chum salmon are also known as...", [
+        { html: "Dog salmon", correct: true },
+        { html: "Friendly salmon", },
+        { html: "Kettle salmon" }
+    ]),
+    GameTools.label("day2_quizpassed"),
+    new GameTools.InfoBox("Security guards", <>
+        <p>Hahahahaha.</p>
+        <p>You may have passed the quiz... but we're not letting you in to this place.</p>
+        <p><b>NOW GET OUT OF HERE!</b></p>
+    </>),
+    new GameTools.InfoBox("You", "You hide in the bushes so you can text Dr. Wise and tell him about the situation. Meanwhile, you find this..."),
+    new CreatureCard(`${getEquivalentCodeLetter('O')} ${getEquivalentCodeLetter('P')}`, require('./external/images/plumose.jpg'), "Plumose anemone", "Metridium giganteum", <p>
+        Plumose anemones are sea anemones found mostly in the cooler waters of the northern Pacific and Atlantic oceans.
+        They are characterized by their numerous threadlike tentacles extending from atop a smooth cylindrical column,
+        and can vary from a few centimeters in height up to one meter or more.
+        <br/>
+        They reproduce by splitting themselves into two pieces, which then produces two new anemones.
+    </p>),
+    new GameTools.DialogueExperience(require('./external/wise.rive'), "Dr. Salman Wise, Ph.D", "", [
+        "I assume you've read the news?",
+        "We've traced that the whale population is being contaminated through salmon.",
+        "Umm... yeah. Anyways, do you have any ideas?"
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Hi.", GameTools.MessageSender.Player);
+        await controller.sendMessage("This is Anna Atlantic's assistant, Ace.", GameTools.MessageSender.Player);
+        await controller.sendMessage("Ahh... Ace. Sooo *pleased* to have you visit.");
+        await controller.sendMessage("To what do I owe this great pleasure of mine?");
+        toggleInputDisabled();
+    }),
+    GameTools.label("day2_mapimage"),
+    new GameTools.InfoBox("Salmon map", <GameTools.ZoomableSVG style={{padding: "1em"}} src={require('./external/images/map.svg')} visibleLayers={[ "Basemap", "Layer 2"]}/>),
+    new GameTools.MultipleChoiceQuestion("What are salmon likely to be eating?", [
+        { html: "Herring", correct: true},
+        { html: "Clams" },
+        { html: "Plankton" }
+    ], true),
+    new GameTools.DialogueExperience(null, "Dr. Salman Wise, Ph.D", "", [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("You should try to find the herring, since they are likely to be contaminating the salmon.");
+        await controller.sendMessage("The best way to do that is to find plankton blooms, since those are what herring eat.");
+        await controller.sendMessage("Plankton may seem tiny, but they're some of the most important organisms in the oceans.");
+        await controller.sendMessage("While I collect data, try this quiz.");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    new GameTools.MultipleChoiceQuestion("The term 'plankton' is Greek for:", [
+        { html: "wanderer", correct: true},
+        { html: "tiny" },
+        { html: "1 ton of wooden boards" }
+    ], true),
+    new GameTools.MultipleChoiceQuestion("Which of the following is considered plankton?", [
+        { html: "herring" },
+        { html: "jellyfish", correct: true },
+        { html: "kelp" }
+    ], true),
+    new GameTools.MultipleChoiceQuestion("What percentage of the world's oxygen is produced by phytoplankton?", [
+        { html: "30-50%" },
+        { html: "70-90%", correct: true },
+        { html: "50-70%" }
+    ], true),
+    new GameTools.MultipleChoiceQuestion("Which of these is made of the remains of a plankton?", [
+        { html: "sand" },
+        { html: "chalk", correct: true },
+        { html: "glue" }
+    ], true),
+    new GameTools.DialogueExperience(null, "Dr. Salman Wise, Ph.D", "", [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("It turns out that there are several large blooms of plankton around the areas where the salmon populations are.");
+        await controller.sendMessage("I think PORPIS will be able to find herring at these locations. I'll send them my data and they should have results for you when you get back to your office");
+        await controller.sendMessage("Good luck!");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    new GameTools.DialogueExperience(null, "Anna Atlantic", "", [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Hey Ace, I just heard from PORPIS.\nI really like the ideas you're coming up with!\nGreat work!");
+        await controller.sendMessage("I think we should look for the barrels around the area with the most contaminated whales.");
+        await controller.sendMessage("(Have a look at your notebook if you're not sure what I mean.)");
+        await controller.sendMessage("I'll give you the contact information for the experts over there. They should be able to help you out.");
+        await controller.sendMessage("See you tomorrow!");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
 ];
 let notebookList = [
-    GameTools.noteBookItem("Item 1", myArray[GameTools.Label.lookupItem(myArray, "breakingNews")]),
-    "item 2",
-    "Item 3"
 ];
 
 (window as any).gt_imagePaths = Object.assign({}, require('./external/images/*.png'), require('./external/images/*.jpg'), require('./external/images/*.svg'));

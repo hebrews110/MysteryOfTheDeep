@@ -23,7 +23,7 @@ class Sender extends Component{
           </button>
           </>}
         {inputType == 'dropdown' && <div className="dropdown rcw-dropdown-message">
-          <button disabled={disabledInput} ref={this.input} className="btn btn-secondary dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Choose a message</button>
+          <button disabled={disabledInput} ref={this.input} className="btn btn-secondary dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">{disabledInput ? "You can't choose a message" : "Choose a message"}</button>
           <div className="dropdown-menu" aria-labelledby="dropdownMenuButton">
             {possibleMessages.map((message, index) => 
               <button disabled={disabledInput} type="submit" onClick={(e) => {

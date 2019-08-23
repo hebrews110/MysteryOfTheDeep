@@ -7,6 +7,13 @@ return "";
 return "![" + arguments[1][1] + "](" + window.gt_imagePaths[arguments[1][0]] + ")";
 < object
 
+> object userFunc javascript
+let func = this.userFuncs[arguments[1][0]];
+if(func != undefined)
+    return func();
+return "Error: func " + arguments[1][0] + "does not exist";
+< object
+
 + *
 - Sorry, I didn't understand that. You can use the question mark at the top for help with any part of the game.
 
