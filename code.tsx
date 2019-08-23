@@ -6,8 +6,6 @@ import "regenerator-runtime/runtime";
 
 import asyncLib from 'async';
 
-import dot from 'dot';
-
 import './external/import-jquery';
 
 import './external/jquery.svg.min';
@@ -138,7 +136,7 @@ namespace GameTools {
     export function isDisplayedItem(item: GameArrayItem): item is DisplayedItem {
         return ((item as any)._isDisplaying !== undefined);
     }
-    async function toDisplayedItem(item: GameArrayItem, array?: GameArray) {
+    async function toDisplayedItem(item: GameArrayItem, array?: GameArray): Promise<DisplayedItem> {
         if(isDisplayedItem(item)) {
             if(!item.resetOnce())
                 await item.reset();
@@ -167,11 +165,36 @@ namespace GameTools {
         protected autoWakePollers: boolean;
         private wrapper: GameArrayFunctionItem;
         private hasReset: boolean;
+        private static showers: number = 0;
+        public getAppendedContainer(showingNew: boolean, adjustNumber = true): JQuery<HTMLElement> {
+            const $overlay = $("#gametools-container .gametools-overlay");
+            const $normal = $("#gametools-container");
+            if(this.objStyle.onTop) {
+                if(adjustNumber) {
+                    if(showingNew)
+                        DisplayedItem.showers++;
+                    else
+                        DisplayedItem.showers--;
+                }
+                console.log("On top, current showers = " + DisplayedItem.showers);
+                console.log($normal.get(0));
+                if(DisplayedItem.showers > 0)
+                    $normal.addClass("overlay-shown");
+                else
+                    $normal.removeClass("overlay-shown");
+                return $overlay;
+            }
+
+            return $normal;
+        }
         public isDisplaying(): boolean {
             return this._isDisplaying;
         }
         static getCurrentlyVisible(): DisplayedItem {
-            return visibleStack[visibleStack.length - 1];
+            if(visibleStack.length > 0)
+                return visibleStack[visibleStack.length - 1];
+            else
+                return null;
         } 
         static updateHelp(helpItem?: HelpButton) {
             if(helpItem == undefined || helpItem == null)
@@ -198,7 +221,7 @@ namespace GameTools {
         protected objectHelp(): string {
             return "";
         }
-        constructor() {
+        constructor(protected objStyle?: StylisticOptions) {
             this._isDisplaying = false;
             this.wrapper = null;
             this.parentArray = null;
@@ -206,7 +229,40 @@ namespace GameTools {
             this.autoWakePollers = true;
             this.hasReset = false;
             Emitter(this);
+            this.initStyles();
         }
+        protected getDefaultStyle(): StylisticOptions {
+            return {};
+        }
+        private initStyles() {
+            if(this.objStyle === undefined)
+                this.objStyle = this.getDefaultStyle();
+            else {
+                let df = this.getDefaultStyle();
+                Object.assign(df, this.objStyle);
+                this.objStyle = df;
+            }
+            if(this.objStyle.shouldColorBackgrounds === undefined)
+                this.objStyle.shouldColorBackgrounds = true;
+            if(this.objStyle.shouldShuffle === undefined)
+                this.objStyle.shouldShuffle = true;
+            if(this.objStyle.showBackdrop === undefined)
+                this.objStyle.showBackdrop = true;
+            if(this.objStyle.forceShowClose === undefined)
+                this.objStyle.forceShowClose = false;
+            if(this.objStyle.customBackgroundClassList === undefined)
+                this.objStyle.customBackgroundClassList = ""; 
+            if(this.objStyle.customBodyClassList === undefined)
+                this.objStyle.customBodyClassList = "";
+            if(this.objStyle.useAsContainer === undefined)
+                this.objStyle.useAsContainer = false;
+            if(this.objStyle.showCorrectConfirmation === undefined)
+                this.objStyle.showCorrectConfirmation = true;
+            if(this.objStyle.onTop == undefined)
+                this.objStyle.onTop = false;
+            return this.objStyle;
+        }
+        
         public on: (event: string, fn: (...args: any[]) => void) => void;
         public once: (event: string, fn: (...args: any[]) => void) => void;
         public off: (event?: string, fn?: (...args: any[]) => void) => void;
@@ -250,12 +306,20 @@ namespace GameTools {
             this._isDisplaying = true;
             visibleStack.push(this);
             DisplayedItem.updateHelp();
+            DisplayedItem.updateContainerClasses();
             this.emit("display");
+        }
+        static updateContainerClasses() {
+            if(visibleStack.length > 0)
+                $("#gametools-container").addClass("gt-ditem-visible");
+            else
+                $("#gametools-container").removeClass("gt-ditem-visible");
         }
         async undisplay() {
             this._isDisplaying = false;
             visibleStack.splice(visibleStack.indexOf(this), 1);
             DisplayedItem.updateHelp();
+            DisplayedItem.updateContainerClasses();
             this.emit("undisplay");
         }
         static doLog(obj: any, logFunc: (obj: any) => any, trace: string) {
@@ -384,9 +448,8 @@ namespace GameTools {
         public $title: JQuery<HTMLElement>;
         public $content: JQuery<HTMLElement>;
         public $footer: JQuery<HTMLElement>;
-        constructor(protected title: GameValue<string>, protected text: GameValue<string>, protected buttonText: GameValue<string> = "OK", protected delay?: number, protected style?: StylisticOptions) {
-            super();
-            this.style = StylisticOptions_Init(this.style);
+        constructor(protected title: GameValue<string>, protected text: GameValue<string>, protected buttonText: GameValue<string> = "OK", protected delay?: number, style?: StylisticOptions) {
+            super(style);
             this.$dialog = null;
             this.$content = null;
             this.$footer = null;
@@ -430,7 +493,7 @@ namespace GameTools {
             await new Promise(async(resolve) => {
                 await sleep(this.delay);
                 this.$dialog = $("<div></div>");
-                $("#gametools-container").append(this.$dialog);
+                this.getAppendedContainer(true).append(this.$dialog);
                 this.$dialog.addClass("modal fade bd-example-modal-sm");
                 this.$dialog.attr({
                     "tabindex": -1,
@@ -446,7 +509,7 @@ namespace GameTools {
                 }
                 let modal_content = $("<div></div>").addClass("modal-content");
                 modal_dialog.append(modal_content);
-                modal_content.addClass(this.style.customBackgroundClassList);
+                modal_content.addClass(this.objStyle.customBackgroundClassList);
                 let modal_header = $("<div></div>").addClass("modal-header");
                 modal_content.append(modal_header);
                 this.$title = $("<h5></h5>").addClass("modal-title");
@@ -454,7 +517,7 @@ namespace GameTools {
                 let close_button = $("<button></button>").addClass("close").attr({ "aria-label": "Close"});
                 modal_header.append(close_button);
                 close_button.append($("<span></span>").attr("aria-hidden", "true").html("&times;"));
-                this.$content = $("<div></div>").addClass("modal-body").addClass(this.style.customBodyClassList);
+                this.$content = $("<div></div>").addClass("modal-body").addClass(this.objStyle.customBodyClassList);
                 modal_content.append(this.$content);
                 this.$footer = $("<div></div>").addClass("modal-footer");
                 modal_content.append(this.$footer);
@@ -469,7 +532,7 @@ namespace GameTools {
                     
                 if(this.text != null) {
                     this.$dialog.find(".modal-body").show();
-                    if(!this.style.useAsContainer) {
+                    if(!this.objStyle.useAsContainer) {
                         getValue(this.text, this.$dialog.find(".modal-body").get(0));
                     } else {
                         let header = modal_header.get(0);
@@ -508,7 +571,7 @@ namespace GameTools {
                     this.$dialog.find(".close").hide();
                     this.$dialog.find(".modal-footer").hide();
                 }
-                if(this.style.forceShowClose) {
+                if(this.objStyle.forceShowClose) {
                     let $close = this.$dialog.find(".close");
                     $close.show();
                     if(this.title == null) {
@@ -530,10 +593,10 @@ namespace GameTools {
                 this.$dialog.one("show.bs.modal", (e) => {
                     var zIndex = 1040 + (10 * $('.modal:visible').length);
                     $(e.target).css('z-index', zIndex);
-                    if(this.style.showBackdrop) {
+                    if(this.objStyle.showBackdrop) {
                         let $backdrop = $("<div></div>").addClass("modal-backdrop fade show");
                         $backdrop.css("z-index", zIndex - 5);
-                        $("#gametools-container").append($backdrop);
+                        this.getAppendedContainer(true, false).append($backdrop);
                         $(e.target).data("my-backdrop", $backdrop);
                     } else
                         $(e.target).data("my-backdrop", null);
@@ -545,6 +608,7 @@ namespace GameTools {
                     resolve();
                     wakeUpPollers(this.getParentArray());
                 });
+                const _self = this;
                 this.$dialog.one("hide.bs.modal", function() {
                     let $backdrop = $(this).data("my-backdrop");
                     if($backdrop != null && $backdrop != undefined) {
@@ -553,7 +617,6 @@ namespace GameTools {
                             $backdrop.remove();
                         }, 250);
                     }
-                    
                 });
                 this.$dialog.one("hidden.bs.modal", (): void => {
                     this.$dialog.modal('dispose');
@@ -564,6 +627,7 @@ namespace GameTools {
                     this.$title = null;
                     $(document.body).removeClass('modal-open');
                     $('.modal:visible').length && $("#gametools-container").addClass('modal-open');
+                    _self.getAppendedContainer(false, true);
                 });
                 this.$dialog.modal( { backdrop: false });
             });
@@ -1297,25 +1361,8 @@ namespace GameTools {
         customBackgroundClassList?: string|string[];
         customBodyClassList?: string|string[];
         useAsContainer?: boolean;
-    }
-    function StylisticOptions_Init(opts: StylisticOptions): StylisticOptions {
-        if(opts === undefined)
-            opts = {};
-        if(opts.shouldColorBackgrounds === undefined)
-            opts.shouldColorBackgrounds = true;
-        if(opts.shouldShuffle === undefined)
-            opts.shouldShuffle = true;
-        if(opts.showBackdrop === undefined)
-            opts.showBackdrop = true;
-        if(opts.forceShowClose === undefined)
-            opts.forceShowClose = false;
-        if(opts.customBackgroundClassList === undefined)
-            opts.customBackgroundClassList = ""; 
-        if(opts.customBodyClassList === undefined)
-            opts.customBodyClassList = "";
-        if(opts.useAsContainer === undefined)
-            opts.useAsContainer = false;
-        return opts;
+        showCorrectConfirmation?: boolean;
+        onTop?: boolean;
     }
     function colorBackground($element) {
         const backColor = HSLToHex(getRandomInt(0, 360), 100, 90);
@@ -1332,6 +1379,9 @@ namespace GameTools {
                 return choice.correct;
             });
         }
+        getDefaultStyle() {
+            return { shouldShuffle: true };
+        }
         async answered($button: JQuery<HTMLElement>) {
             let option: QuestionOption = $button.data("questionOption");
             if(option.fn !== undefined)
@@ -1339,12 +1389,17 @@ namespace GameTools {
             GameTools.lastData = this.choices.indexOf(option);
             if(!this.isQuestion || option.correct) {
                 GameTools.lastResult = true;
-                await this.undisplay();
-                let box = new InfoBox("That's right!", <p>
-                    The correct answer was: <b>{option.html}</b>
-                </p>, "OK", InfoBox.defaultDelay);
-                await box.display();
-                box.once("undisplay", () => this.moveToNext());
+                if(this.objStyle.showCorrectConfirmation) {
+                    $button.empty();
+                    $button.addClass("disable-hover");
+                    this.$title.html(`That's right! The correct answer was ${option.html}.`);
+                    $button.append($("<i></i>").addClass("fas fa-check").css({
+                        "font-size": "150%",
+                        "color": "green"
+                    }));
+                    await sleep(3000);
+                }
+                this.displayNext();
             } else {
                 GameTools.lastResult = false;
                 this.title = "Sorry, that wasn't the correct answer.";
@@ -1365,10 +1420,10 @@ namespace GameTools {
             getValue(this.instructions, $instructionsDiv.get(0));
             var $finderButtons = $("<div></div>").addClass("finder-buttons").appendTo($body);
             console.log("Button finder created");
-            shuffle(this.choices, this.style.shouldShuffle).forEach((element, index) => {
+            shuffle(this.choices, this.objStyle.shouldShuffle).forEach((element, index) => {
                 var $button = $("<button></button>");
                 getValue(element.html, $button.get(0));
-                if(this.style.shouldColorBackgrounds)
+                if(this.objStyle.shouldColorBackgrounds)
                     colorBackground($button);
                 $button.data("index", index);
                 $button.data("questionOption", element);
@@ -1403,6 +1458,7 @@ namespace GameTools {
         $gametools_wrapper.append($("<div></div>").attr("id", "gametools-container"));
         $("#gametools-container").append($("<div></div>").addClass("background-img").attr("id", 'bk-im-0'));
         $("#gametools-container").append($("<div></div>").addClass("background-img").attr('id', 'bk-im-1'));
+        $("#gametools-container").append($("<div></div>").addClass("gametools-overlay"));
         reactedSet = new Set<HTMLElement>();
         visibleStack = [];
         moment.updateLocale('en', {
@@ -1480,11 +1536,16 @@ namespace GameTools {
             await visibleStack[i].resize();
         }
     }
-    export function warnUser(): void {
+    export async function warnUser() {
         if(BrowserDetect.browser === 'Explorer') {
-            new InfoBox("Attention!", "<p>This game is not heavily tested on Internet Explorer and may contain bugs/visual issues.</p>" +
-                "<p>Please use a browser such as Pale Moon, Mozilla Firefox, or Google Chrome.</p>", "Continue anyways", 0).display();
+            let box = new InfoBox("Attention!", "<p>This game is not heavily tested on Internet Explorer and may contain bugs/visual issues.</p>" +
+                "<p>Please use a browser such as Pale Moon, Mozilla Firefox, or Google Chrome.</p>", "Continue anyways", 0);
+            return new Promise((resolve) => {
+                box.once("undisplay", () => resolve());
+                box.display();
+            });
         }
+        return Promise.resolve();
     }
     interface BaseSwitchCase<T> {
         handler: (arg0: T) => any;
@@ -1626,7 +1687,7 @@ namespace GameTools {
         itemClassName?: string;
         onClick?: (e: React.MouseEvent<HTMLLIElement, MouseEvent>) => void;
     }
-    type NotebookItem = String&{
+    export type NotebookItem = String&{
         noteBookLink?: GameArrayItem;
     };
     export function noteBookItem(itemName: String, noteBookLink?: GameArrayItem): NotebookItem {
@@ -1634,21 +1695,23 @@ namespace GameTools {
         item.noteBookLink = noteBookLink;
         return item;
     }
-    export class Notebook extends React.Component<{ title: string; notebookItems: NotebookItem[]; }> {
+    export class Notebook extends React.Component<{ title: string; notebookItems: Iterable<NotebookItem>; }> {
+        notebookArray: Array<NotebookItem>;
         async itemOnClick(e: React.MouseEvent<HTMLLIElement, MouseEvent>) {
             let index = parseInt($(e.target).attr("data-index"));
-            if(this.props.notebookItems[index].noteBookLink != undefined) {
-                let item = await toDisplayedItem(this.props.notebookItems[index].noteBookLink, null);
+            if(this.notebookArray[index].noteBookLink != undefined) {
+                let item = await toDisplayedItem(this.notebookArray[index].noteBookLink, null);
                 await item.display();
             }
         }
         render() {
             const { title, notebookItems, ...rest } = this.props;
+            this.notebookArray = Array.from(notebookItems);
             return <div className="gametools-notebook" {...rest}>
                 <div className="lines"></div>
                 <ModalTitleBar title={this.props.title}/>
                 <ul>
-                    {notebookItems.map((item, index) => <li className={item.noteBookLink !== undefined ? "gt-notebook-clickable": ""} data-index={index} key={index} onClick={this.itemOnClick.bind(this)}>{item}</li>)}
+                    {this.notebookArray.map((item, index) => <li className={item.noteBookLink !== undefined ? "gt-notebook-clickable": ""} data-index={index} key={index} onClick={this.itemOnClick.bind(this)}>{item}</li>)}
                 </ul>
                 {this.props.children}
             </div>;
@@ -2449,6 +2512,15 @@ namespace GameTools {
             }
         });
     }
+    export function magnify(img: JQuery<HTMLElement>) {
+        img.addClass("gt-preview-image mfp-popup-wrapper");
+        (img as any).magnificPopup({
+            items: {
+                src: img.attr("src")
+            },
+            type: 'image'
+        });
+    }
     export class ZoomableSVG extends React.Component<{ src: string; visibleLayers?: string[]; extraClasses?: string; style?: React.CSSProperties; }, {svg_html: string; }> {
         imgRef: React.RefObject<HTMLDivElement>;
         constructor(props) {
@@ -2557,6 +2629,41 @@ namespace GameTools {
         array.push(item);
         return item;
     }
+    export class AddToNotebook extends DisplayedItem {
+        constructor(protected list: Set<NotebookItem>, protected items: (NotebookItem|Array<NotebookItem>), protected showItem?: boolean) {
+            super();
+        }
+        async display() {
+            let firstItem: GameArrayItem = null;
+            if(Array.isArray(this.items)) {
+                console.log("Is iterable");
+                console.log(this.items);
+                if(this.showItem == undefined)
+                    this.showItem = false;
+                this.items.forEach((item, index) => {
+                    if(index == 0)
+                        firstItem = item.noteBookLink;
+                    this.list.add(item);
+                });
+            } else {
+                if(this.showItem == undefined)
+                    this.showItem = true;
+                this.list.add(this.items);
+                firstItem = this.items.noteBookLink;
+            }
+            await super.display();
+            console.log("Show: " + this.showItem);
+            if(this.showItem && firstItem != null && firstItem != undefined) {
+                let item = await toDisplayedItem(firstItem, this.getParentArray());
+                item.displayNext = item.undisplay;
+                item.once("undisplay", () => {
+                    this.displayNext();
+                });
+                item.display();
+            } else
+                this.displayNext();
+        }
+    }
 }
 
 class CreatureCard extends GameTools.InfoBox {
@@ -2569,6 +2676,8 @@ class CreatureCard extends GameTools.InfoBox {
         modal_header.empty();
         modal_header.html(this.code);
         let leftDiv = $("<div><h2>CREATURE CARDS</h2><h4>PACIFIC NORTHWEST SERIES</h4><img src='" + this.img + "'/></div>");
+        let img = leftDiv.find("img");
+        GameTools.magnify(img);
         this.$content.empty();
         this.$content.append(leftDiv);
         let rightDiv = $("<div></div>");
@@ -2579,6 +2688,8 @@ class CreatureCard extends GameTools.InfoBox {
         this.$content.append(rightDiv);
     }
 }
+
+let notebookList = new Set<GameTools.NotebookItem>();
 async function showNotebook(this: GameTools.ControlButton) {
     await new Promise((resolve) => {
         GameTools.startDisplay([ 
@@ -2647,7 +2758,7 @@ let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
             <p></p>
             "It was all thanks to Anna Atlantic," Mr. Flounder announced at a press conference. "This is no ordinary fish."
             <p></p>
-            When asked to comment by a <i>Routine Rambler</i> reporter on what unique qualities the fish had, Mr. Flounder boldy proclaimed that the fish could predict the
+            When asked to comment by a <i>Routine Rambler</i> reporter on what unique qualities the fish had, Mr. Flounder boldly proclaimed that the fish could predict the
             future, build robots, and cook better than any other French chef out there.
         </>
     },
@@ -2657,7 +2768,7 @@ let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
             Due to unforeseen circumstances, bus service for the town of Awakataka will be reduced to the following routes only over the next week:
             <ul>
                 <li><b>Route 1:</b> Airport Rocket</li>
-                <li><b>Route 24:</b> Teddy Service (will only serve stops up to and including Salmon Hatchery)</li>
+                <li><b>Route 24:</b> Teddy Service (will only serve stops up to and including Wiseguy Way)</li>
             </ul>
             <p></p>
             Awakataka Transit apologizes for any inconvenience this may cause.
@@ -2684,7 +2795,7 @@ let day2Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
             <p></p>
             Martin Mersenich stated that he was "doubtful of PORPIS' efforts":
             <blockquote>PORPIS has no salmon facility, so they're going to stop working on this soon.
-                It would be really nice if someone useful was actually working on the case!</blockquote>
+                It would be really nice if someone useful (a.k.a. <i>me</i>) was actually working on the case!</blockquote>
         </>
     }
 ]}/>);
@@ -2695,7 +2806,7 @@ export function BusStop(props) {
 
 let shift = 12; /* Code shift */
 
-let realCode = "They'll never find my secret or I'm not David G. Flounder.";
+let realCode = "They'll never find my secret or I'm not Martin Mersenich.";
 
 let codedCode = GameTools.codeify(GameTools.caesarShift(realCode, shift));
 
@@ -2703,18 +2814,22 @@ function getEquivalentCodeLetter(letter: string): string {
     return `${letter}=${GameTools.caesarShift(letter, shift)}`;
 }
 
-let day1_notebookitems: GameTools.GameArrayItem[] = [];
+let day1_notebookitems: GameTools.NotebookItem[] = [];
+let day2_notebookitems: GameTools.NotebookItem[] = [];
 let myArray = [
-    new GameTools.Loop({ index: "day2_mapimage"}),
+    new GameTools.Invoke(() => GameTools.warnUser()),
+    new GameTools.Loop({ index: "day2_quizpassed"}),
     new GameTools.MultipleChoiceQuestion("Choose a chapter.", [
         { html: "Chapter 1" },
         { html: "Chapter 2" },
         { html: "Chapter 3" },
         { html: "Chapter 4" }
-    ], false, { shouldColorBackgrounds: false, shouldShuffle: false }),
+    ], false, { shouldColorBackgrounds: false, shouldShuffle: false, showCorrectConfirmation: false }),
+    new GameTools.SystemReset(),
     new GameTools.Loop({ index: () => "chapter" + (GameTools.lastData + 1)}),
     // ---------------------------- CHAPTER 1 --------------------------------
     GameTools.label("chapter1"),
+    new GameTools.Invoke(() => notebookList = new Set()),
     new GameTools.SetBackground(require('./external/images/office.svg')),
     new GameTools.ButtonFinder("Explore Anna Atlantic's office!", "", [
         { button: <>
@@ -2847,18 +2962,18 @@ let myArray = [
     ], async(controller) => {
         toggleInputDisabled();
         await controller.sendMessage("That's right.\nToo bad we at PORPIS don't have a salmon facility.");
-        await controller.sendMessage("Wait!\nThere's this salmon expert that I know from a long way back.");
-        await controller.sendMessage("Let me give you their contact information.");
+        await controller.sendMessage("Wait!\nThere's this salmon expert that I know from a long way back, Dr. Salman Wise.");
+        await controller.sendMessage("Let me give you his contact information.\nHe can probably help you, if you can talk to him...");
         await controller.sendMessage("Also, I have this card that your boss, Anna gave to me a while ago. Maybe it would be useful.");
         GameTools.DialogueExperience.doReenableInput = true;
         controller.showCloseButton();
     }),
     GameTools.label("firstCreatureCard"),
-    GameTools.appendToArray(day1_notebookitems, () => new CreatureCard(`${getEquivalentCodeLetter('Y')} ${getEquivalentCodeLetter('Z')}`, require('./external/images/sunflowerstar.jpg'), "Sunflower star", "Pycnopedia helianthoides", <p>
+    new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day1_notebookitems, GameTools.noteBookItem("Creature card", () => new CreatureCard(`${getEquivalentCodeLetter('Y')} ${getEquivalentCodeLetter('Z')}`, require('./external/images/sunflowerstar.jpg'), "Sunflower star", "Pycnopedia helianthoides", <p>
         The sunflower star is a large sea star found in the northeast Pacific. The only species of its genus, it is among the largest sea stars in the world (but not quite the largest),
         with a maximum arm span of 1 m (3.3 ft). Sunflower sea stars usually have 16 to 24 limbs; their color can vary widely. They are predatory, feeding mostly on sea urchins,
         clams, snails, and other small invertebrates. Although the species had been widely distributed throughout the northeast Pacific, its population has rapidly declined since 2013.
-    </p>)),
+    </p>)))),
     GameTools.label("finalday1chat"),
     new GameTools.DialogueExperience(require('./external/atlantic.rive'), "Anna Atlantic", undefined, [
         "I talked to PORPIS, and we think that the barrels are contaminating the local salmon.",
@@ -2871,8 +2986,11 @@ let myArray = [
     }, {
         "getMessage": () => codedCode
     }),
+    new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day1_notebookitems, GameTools.noteBookItem("Coded message", () => new GameTools.InfoBox("Coded message", "<p>The code is:</p><p><b>" + codedCode + "</b></p>"))), false),
     // ---------------------------- CHAPTER 2 --------------------------------
     GameTools.label("chapter2"),
+    new GameTools.Invoke(() => notebookList = new Set()),
+    new GameTools.AddToNotebook(notebookList, day1_notebookitems),
     new GameTools.SetBackground(require('./external/images/office.svg')),
     new GameTools.ButtonFinder("Explore Anna Atlantic's office!", "", [
         { button: <>
@@ -2892,7 +3010,19 @@ let myArray = [
             <div className="business-card-row">
                 <span className="business-card-small">Expert on all things salmon. Phone to book a meeting.</span>
             </div>
-        </>) }
+        </>) },
+        { button: <>
+            <img src={require('./external/images/creature_card.svg')}/>
+            Creature card
+        </>,
+        link: new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Creature card", () => new CreatureCard(`${getEquivalentCodeLetter('Q')} ${getEquivalentCodeLetter('R')}`, require('./external/images/pacific_scallop.jpg'), "Pacific pink scallop", "Chlamys hastata", <p>
+            Pacific pink scallops are part of a large class of molluscs, also known as pelecypods.
+            <br/>
+            They have a hard calcareous shell made of two parts or 'valves'. The soft parts are inside the shell. The shell is usually bilaterally symmetrical.
+            <br/>
+            Scallops, and file clams can swim to escape a predator, clapping their valves together to create a jet of water.
+        </p>))))
+        }
     ], 0),
     new GameTools.Condition(GameTools.label(""), new GameTools.Loop({ index: -1 })),
     GameTools.label("day2_busstop"),
@@ -2972,17 +3102,18 @@ let myArray = [
     GameTools.label("day2_quizpassed"),
     new GameTools.InfoBox("Security guards", <>
         <p>Hahahahaha.</p>
-        <p>You may have passed the quiz... but we're not letting you in to this place.</p>
-        <p><b>NOW GET OUT OF HERE!</b></p>
+        <p>You may have passed the quiz... but we're not letting you in to this place. Why? Because you asked to speak to "Salman Wise", not <b><i>Dr.</i></b> Salman Wise.</p>
+        <p><b>We think it's time for you to leave....</b></p>
     </>),
+    new GameTools.SetBackground(require('./components/grass.svg')),
     new GameTools.InfoBox("You", "You hide in the bushes so you can text Dr. Wise and tell him about the situation. Meanwhile, you find this..."),
-    new CreatureCard(`${getEquivalentCodeLetter('O')} ${getEquivalentCodeLetter('P')}`, require('./external/images/plumose.jpg'), "Plumose anemone", "Metridium giganteum", <p>
+    new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Creature Card", () => new CreatureCard(`${getEquivalentCodeLetter('O')} ${getEquivalentCodeLetter('P')}`, require('./external/images/plumose.jpg'), "Plumose anemone", "Metridium giganteum", <p>
         Plumose anemones are sea anemones found mostly in the cooler waters of the northern Pacific and Atlantic oceans.
         They are characterized by their numerous threadlike tentacles extending from atop a smooth cylindrical column,
         and can vary from a few centimeters in height up to one meter or more.
         <br/>
         They reproduce by splitting themselves into two pieces, which then produces two new anemones.
-    </p>),
+    </p>)))),
     new GameTools.DialogueExperience(require('./external/wise.rive'), "Dr. Salman Wise, Ph.D", "", [
         "I assume you've read the news?",
         "We've traced that the whale population is being contaminated through salmon.",
@@ -2996,7 +3127,8 @@ let myArray = [
         toggleInputDisabled();
     }),
     GameTools.label("day2_mapimage"),
-    new GameTools.InfoBox("Salmon map", <GameTools.ZoomableSVG style={{padding: "1em"}} src={require('./external/images/map.svg')} visibleLayers={[ "Basemap", "Layer 2"]}/>),
+    new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Salmon map",
+        () => new GameTools.InfoBox("Salmon map", <GameTools.ZoomableSVG style={{padding: "1em"}} src={require('./external/images/map.svg')} visibleLayers={[ "Basemap", "Layer 2"]}/>)))),
     new GameTools.MultipleChoiceQuestion("What are salmon likely to be eating?", [
         { html: "Herring", correct: true},
         { html: "Clams" },
@@ -3053,8 +3185,6 @@ let myArray = [
         controller.showCloseButton();
     }),
 ];
-let notebookList = [
-];
 
 (window as any).gt_imagePaths = Object.assign({}, require('./external/images/*.png'), require('./external/images/*.jpg'), require('./external/images/*.svg'));
 
@@ -3070,8 +3200,5 @@ $(async function() {
         </div>
     </>, $("#top-bar").get(0));
     GameTools.initializeArray(myArray);
-    GameTools.waitForIndex(myArray, GameTools.Label.lookupItem(myArray, "breakingNews")).then(() => {
-        GameTools.warnUser();
-    });
     GameTools.startDisplay(myArray);
 });
