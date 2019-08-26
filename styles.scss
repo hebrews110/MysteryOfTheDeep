@@ -45,6 +45,350 @@ html {
 }
 
 #gametools-container {
+    .clocks {
+        padding: 0;
+        width: auto;
+        font-size: 1rem;
+        &.single {
+            padding: 0;
+            border-radius: 50%;
+            height: 20em;
+            width: 20em;
+            display: inline-block;
+            .clock {
+                height: 20em;
+                width: 20em;
+                padding: 0;
+                margin: 0;
+            }
+        }
+    }
+
+    .clock {
+        border-radius: 50%;
+        border: 0.2rem black solid;
+        display: inline-block;
+        padding-bottom: 31.333%;
+        position: relative;
+        width: 31.333%;
+        opacity: 0;
+    }
+
+    .multiple .clock {
+        left: auto;
+    }
+
+    .clock.show {
+        opacity: 1;
+        -webkit-transition: all 2.5s cubic-bezier(0.12, 1.03, 0.34, 1);
+        transition: all 2.5s cubic-bezier(0.12, 1.03, 0.34, 1);
+    }
+
+    .multiple .clock.show {
+        -webkit-transform: none;
+        transform: none;
+    }
+
+    .clock::after {
+        background: red;
+        border-radius: 50%;
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        -webkit-transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%);
+        width: 4%;
+        height: 4%;
+        z-index: 10;
+    }
+
+    .minutes-container,
+    .hours-container,
+    .seconds-container {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+    }
+
+    .hours-container {
+        animation: rotate 43200s infinite linear;
+    }
+
+    
+    .linear {
+        .minutes-container {
+            animation: rotate 3600s infinite linear;
+        }
+        .seconds-container {
+            animation: rotate 60s infinite linear;
+        }
+    }
+
+    .steps {
+        .minutes-container {
+            animation: rotate 3600s infinite steps(60);
+        }
+        .seconds-container {
+            animation: rotate 60s infinite steps(60);
+        }
+    }
+
+    .local.steps .minutes-container {
+        animation: none;
+    }
+
+    .bounce {
+        .minutes-container {
+            -webkit-transition: -webkit-transform 0.3s
+                cubic-bezier(0.4, 2.08, 0.55, 0.44);
+            transition: -webkit-transform 0.3s
+                cubic-bezier(0.4, 2.08, 0.55, 0.44);
+            transition: transform 0.3s cubic-bezier(0.4, 2.08, 0.55, 0.44);
+            transition: transform 0.3s cubic-bezier(0.4, 2.08, 0.55, 0.44),
+                -webkit-transform 0.3s cubic-bezier(0.4, 2.08, 0.55, 0.44);
+        }
+        .seconds-container {
+            -webkit-transition: -webkit-transform 0.2s
+                cubic-bezier(0.4, 2.08, 0.55, 0.44);
+            transition: -webkit-transform 0.2s
+                cubic-bezier(0.4, 2.08, 0.55, 0.44);
+            transition: transform 0.2s cubic-bezier(0.4, 2.08, 0.55, 0.44);
+            transition: transform 0.2s cubic-bezier(0.4, 2.08, 0.55, 0.44),
+                -webkit-transform 0.2s cubic-bezier(0.4, 2.08, 0.55, 0.44);
+        }
+    }
+
+    .hours {
+        background: #000;
+        width: 3.5%;
+        height: 40%;
+        position: absolute;
+        left: 48.25%;
+        top: 22%;
+        -webkit-transform-origin: 50% 71%;
+        transform-origin: 50% 71%;
+    }
+
+    .minutes {
+        background: #000;
+        width: 3.5%;
+        height: 55%;
+        position: absolute;
+        left: 48.25%;
+        top: 7%;
+        -webkit-transform-origin: 50% 78.5%;
+        transform-origin: 50% 78.5%;
+    }
+
+    .seconds {
+        background: red;
+        width: 1.5%;
+        height: 42%;
+        position: absolute;
+        left: 49.25%;
+        top: 20%;
+        -webkit-transform-origin: 50% 71%;
+        transform-origin: 50% 71%;
+        z-index: 8;
+    }
+
+    .label {
+        background: #fff;
+        border-radius: 0.25em;
+        color: #000;
+        font-family: MyriadPro-Regular, "Myriad Pro Regular", MyriadPro,
+            "Myriad Pro", Helvetica, Arial, sans-serif;
+        font-size: 0.5em;
+        font-weight: bold;
+        text-transform: uppercase;
+        padding: 0.5em 0.75em 0.25em;
+        position: absolute;
+        top: -4em;
+        left: 50%;
+        -webkit-transform: translate(-50%, 0);
+        transform: translate(-50%, 0);
+    }
+    
+    @keyframes rotate {
+        100% {
+            -webkit-transform: rotateZ(360deg);
+            transform: rotateZ(360deg);
+        }
+    }
+    .clock-fast {
+        $fast-base: 3s;
+        .hours-container {
+            animation: rotate ($fast-base * 12) infinite linear;
+        }
+        .minutes-container {
+            animation: rotate $fast-base infinite linear;
+        }
+        .seconds-container {
+            animation: rotate ($fast-base / 6) infinite linear;
+        }
+    }
+    .clock {
+        &.ios7 {
+            background: #fff url(external/images/ios_clock.svg) no-repeat center;
+            background-size: 88%;
+            &:before {
+                background: black;
+                border-radius: 50%;
+                content: "";
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                -webkit-transform: translate(-50%, -50%);
+                transform: translate(-50%, -50%);
+                width: 6%;
+                height: 6%;
+                z-index: 0;
+            }
+            &:after {
+                width: 2%;
+                height: 2%;
+            }
+            .seconds {
+                border-radius: 200%/10%;
+                height: 30%;
+                left: 49.5%;
+                top: 20%;
+                width: 1%;
+                -webkit-transform-origin: 50% 100%;
+                transform-origin: 50% 100%;
+            }
+            .minutes {
+                border-radius: 150%/10%;
+                width: 2%;
+                height: 35%;
+                left: 49%;
+                top: 15%;
+                -webkit-transform-origin: 50% 100%;
+                transform-origin: 50% 100%;
+            }
+            .hours {
+                border-radius: 85%/10%;
+                width: 2%;
+                height: 20%;
+                left: 49%;
+                top: 30%;
+                -webkit-transform-origin: 50% 100%;
+                transform-origin: 50% 100%;
+            }
+        }
+        &.simple {
+            background: #fff url(external/images/ios_clock.svg) no-repeat center;
+            background-size: 88%;
+            &:after {
+                background-color: #000;
+                width: 5%;
+                height: 5%;
+            }
+            .seconds {
+                background-color: #000;
+                height: 45%;
+                left: 49.5%;
+                top: 14%;
+                width: 1%;
+                -webkit-transform-origin: 50% 80%;
+                transform-origin: 50% 80%;
+            }
+            .minutes {
+                width: 2%;
+                height: 40%;
+                left: 49%;
+                top: 10%;
+                -webkit-transform-origin: 50% 100%;
+                transform-origin: 50% 100%;
+            }
+            .hours {
+                width: 2.5%;
+                height: 20%;
+                left: 48.75%;
+                top: 30%;
+                -webkit-transform-origin: 50% 100%;
+                transform-origin: 50% 100%;
+            }
+        }
+    }
+
+    .hours.angled {
+        -webkit-transform: rotateZ(-40deg);
+        transform: rotateZ(-40deg);
+    }
+
+    .minutes.angled {
+        -webkit-transform: rotateZ(40deg);
+        transform: rotateZ(40deg);
+    }
+
+    .post-header-container {
+        width: 46em;
+        height: 32em;
+        position: absolute;
+        left: 50%;
+        top: 75%;
+        -webkit-transform: translate(-90%, -40%);
+        transform: translate(-90%, -40%);
+        .clock {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            -webkit-perspective: 1200px;
+            perspective: 1200px;
+            -webkit-transform-style: preserve-3d;
+            transform-style: preserve-3d;
+            -webkit-transform: scaleY(0.6) rotateY(60deg) rotateX(30deg);
+            transform: scaleY(0.6) rotateY(60deg) rotateX(30deg);
+            &::after {
+                display: none;
+            }
+        }
+    }
+
+    .post-header {
+        background: #3cd19e;
+    }
+
+    .demo {
+        .extrude1,
+        .extrude2,
+        .extrude3 {
+            display: block;
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+        }
+        .extrude1 {
+            -webkit-transform: translateZ(4em);
+            transform: translateZ(4em);
+            opacity: 0.4;
+        }
+        .extrude2 {
+            -webkit-transform: translateZ(16em);
+            transform: translateZ(16em);
+            opacity: 0.6;
+        }
+        .extrude3 {
+            -webkit-transform: translateZ(28em);
+            transform: translateZ(28em);
+            opacity: 1;
+        }
+        .seconds-container {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+        .minutes-container {
+            background-color: rgba(255, 255, 255, 0.6);
+        }
+        .hours-container {
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+    }
     .newspaper {
         text-align: left;
         background-color: #ffffff;
@@ -569,12 +913,14 @@ html {
                 display: block;
             }
         }
-        button:not(:hover), button.disable-hover {
+        button:not(:hover),
+        button.disable-hover {
             background-color: #eeeeee !important;
         }
     }
     .modal-dialog-centered {
         min-height: calc(100% - #{$modal-dialog-margin * 2});
+        justify-content: center;
         &:before {
             height: 100%;
         }
@@ -703,7 +1049,7 @@ button.modal-pinned-corner-close {
                     $wh: $whp + 1%;
                     width: $wh;
                     height: $wh;
-                    
+
                     background: linear-gradient(
                         random(180) + deg,
                         rgba(255, 255, 255, random(10) / 8) 1%,
@@ -713,7 +1059,6 @@ button.modal-pinned-corner-close {
                     bottom: (random(200)-200) + 1%;
                     opacity: min(random() + 0.1, 1);
                     z-index: random(15);
-                    
                 }
             }
         }
@@ -721,26 +1066,29 @@ button.modal-pinned-corner-close {
         will-change: transform, opacity;
         @keyframes water-bubble-container {
             20% {
-                transform: translatex(-1 * random(10) + px) translateZ(0) translateY(-40%);
+                transform: translatex(-1 * random(10) + px) translateZ(0)
+                    translateY(-40%);
             }
             40% {
-                transform: translatex(random(12) + px) translateZ(0) translateY(-80%);
+                transform: translatex(random(12) + px) translateZ(0)
+                    translateY(-80%);
             }
             60% {
-                transform: translatex(-1 * random(10) + px) translateZ(0) translateY(-120%);
+                transform: translatex(-1 * random(10) + px) translateZ(0)
+                    translateY(-120%);
             }
             80% {
                 opacity: 1;
-                transform: translatex(random(12) + px) translateZ(0) translateY(-160%);
+                transform: translatex(random(12) + px) translateZ(0)
+                    translateY(-160%);
             }
             100% {
                 opacity: 0;
-                transform: translatex(-1 * random(10) + px) translateY(-200%) translateZ(0);
+                transform: translatex(-1 * random(10) + px) translateY(-200%)
+                    translateZ(0);
             }
         }
     }
-    
-
 }
 
 .gt-preview-image {
@@ -1026,13 +1374,17 @@ div.jumping-dots {
             overflow-x: auto;
             height: 100%;
             display: inline-flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: flex-start;
-            align-content: flex-start;
+            flex-direction: row;
+            justify-content: flex-start;
+            align-items: center;
+            align-content: center;
             white-space: nowrap;
             position: relative;
             z-index: 0;
+            vertical-align: middle;
+            .badge {
+                vertical-align: middle;
+            }
         }
         $button-vpadding: 4px;
         .top-buttons {
@@ -1054,7 +1406,11 @@ div.jumping-dots {
                 $w: 1.5rem;
                 left: -$w;
                 width: $w;
-                background: linear-gradient(to left, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0));
+                background: linear-gradient(
+                    to left,
+                    rgba(255, 255, 255, 1),
+                    rgba(255, 255, 255, 0)
+                );
             }
         }
         .control-button {
@@ -1148,7 +1504,7 @@ div.jumping-dots {
 }
 
 #gametools-container {
-    &.overlay-shown { 
+    &.overlay-shown {
         > .modal {
             opacity: 0;
             pointer-events: none;
@@ -1219,18 +1575,20 @@ div.jumping-dots {
         1px 1px 0 rgba(255, 255, 255, 0.55), 0 1px 3px white;
     &:hover {
         cursor: pointer;
-        transform: rotateX(60deg) rotateY(0deg) rotateZ(45deg) translateZ(10px) scale(1.0, 1.0);
+        transform: rotateX(60deg) rotateY(0deg) rotateZ(45deg) translateZ(10px)
+            scale(1, 1);
         box-shadow: 20px 20px 20px rgba(0, 0, 0, 0.4);
     }
     &:focus {
-        transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateZ(10px) scale(1.0, 1.0);
+        transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateZ(10px)
+            scale(1, 1);
         box-shadow: 0px 10px 10px rgba(0, 0, 0, 0.4);
         &::before {
-            transform: skewX(0deg) translateX(0px) translateY(0px) scale(1.0, 1.0);
+            transform: skewX(0deg) translateX(0px) translateY(0px) scale(1, 1);
             height: 0px;
         }
         &::after {
-            transform: skewY(0deg) translateX(0px) translateY(0px) scale(1.0, 1.0);
+            transform: skewY(0deg) translateX(0px) translateY(0px) scale(1, 1);
             width: 0px;
         }
     }
@@ -1247,14 +1605,14 @@ div.jumping-dots {
         height: 6px;
         bottom: 0;
         left: 0;
-        transform: skewX(45deg) translateX(-3px) translateY(6px) scale(1.0, 1.0);
+        transform: skewX(45deg) translateX(-3px) translateY(6px) scale(1, 1);
     }
     &::after {
         height: 100%;
         width: 6px;
         top: 0;
         right: 0;
-        transform: skewY(45deg) translateX(6px) translateY(-3px) scale(1.0, 1.0);
+        transform: skewY(45deg) translateX(6px) translateY(-3px) scale(1, 1);
     }
     p {
         margin: 0;

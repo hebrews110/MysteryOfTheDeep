@@ -13,6 +13,10 @@ declare interface Boolean {
 declare interface Function {
     gametools_val: {};
 }
+
+declare interface Object {
+    gametools_val: {};
+}
 declare interface JQuery {
     randomize(childElem: string): JQuery;
     equals(otherElement: JQuery): boolean;

@@ -75,7 +75,7 @@
                     var req = new XMLHttpRequest();
 
                     // report progress events
-                    var startDate = Date.now();
+                    window.load_startDate = Date.now();
                     req.addEventListener("progress", function(event) {
                         if (event.lengthComputable) {
                             var percentComplete = event.loaded / event.total;
@@ -98,11 +98,8 @@
                     };
                     // load responseText into a new script element
                     req.addEventListener("load", function(event) {
-                        var endDate = Date.now();
-                        var timeout = Math.max(3000-(endDate-startDate), 0);
-                        setTimeout(function() {
-                            loadScript(event);
-                        }, timeout);
+                        window.load_endDate = Date.now();
+                        loadScript(event);
                     }, false);
 
                     req.overrideMimeType("text/plain");

@@ -64,11 +64,17 @@ import ClipLoader from 'react-spinners/ClipLoader';
 
 import Emitter from 'component-emitter';
 
+import { Line } from 'react-chartjs-2';
+
+// import the plugin core
+import 'chartjs-plugin-colorschemes/src/plugins/plugin.colorschemes';
+
+// import a particular color scheme
+import { Aspect6 } from 'chartjs-plugin-colorschemes/src/colorschemes/colorschemes.office';
 
 namespace GameTools {
     export let helpRef: React.RefObject<any>;
     let helpShown: boolean;
-    let reactedSet: Set<HTMLElement>;
     let visibleStack: DisplayedItem[];
     export const SPEED_HACK: boolean = true;
     (function($) {
@@ -166,6 +172,41 @@ namespace GameTools {
         private wrapper: GameArrayFunctionItem;
         private hasReset: boolean;
         private static showers: number = 0;
+        private reactedSet: Set<HTMLElement>;
+        public doRenderReact<T extends React.Component>(element: JSX.Element, container: HTMLElement, callback?: (component: T) => any) {
+            ReactDOM.render(element, container, function() {
+                if(callback != undefined && callback != null)
+                    callback(this);
+            });
+            this.reactedSet.add(container);
+        }
+        public static getValue<T>(item: DisplayedItem, val: GameValue<T>, container?: HTMLElement): T {
+            let value: T;
+            if(val == null || val == undefined) {
+                value = null;
+            } else if(Object(val) !== val) {
+                value = ((val as unknown) as T);
+            } else if(val instanceof Function) {
+                value = val();
+            } else if(React.isValidElement(val)) {
+                if(container !== undefined && item != null && item != undefined) {
+                    item.doRenderReact(val, container);
+                    return undefined;
+                } else {
+                    value = ((ReactDOMServer.renderToStaticMarkup(val) as unknown) as T);
+                    console.warn("In most cases, rendering React components to a string will not give the desired behavior, " +
+                                 "as event handlers and other related metadata will not be included.");
+                }
+                
+            } else {
+                value = (val.valueOf() as T);
+            }
+            if(container !== undefined) {
+                container.innerHTML = ((value as unknown) as string);
+                return undefined;
+            }
+            return value;
+        }
         public getAppendedContainer(showingNew: boolean, adjustNumber = true): JQuery<HTMLElement> {
             const $overlay = $("#gametools-container .gametools-overlay");
             const $normal = $("#gametools-container");
@@ -228,6 +269,7 @@ namespace GameTools {
             this.arraySet = false;
             this.autoWakePollers = true;
             this.hasReset = false;
+            this.reactedSet = new Set<HTMLElement>();
             Emitter(this);
             this.initStyles();
         }
@@ -315,11 +357,27 @@ namespace GameTools {
             else
                 $("#gametools-container").removeClass("gt-ditem-visible");
         }
-        async undisplay() {
+        private detachReact() {
+            this.reactedSet.forEach((element) => {
+                ReactDOM.unmountComponentAtNode(element);
+                this.reactedSet.delete(element);
+            });
+        }
+        public readonly undisplay = async () => {
             this._isDisplaying = false;
             visibleStack.splice(visibleStack.indexOf(this), 1);
             DisplayedItem.updateHelp();
             DisplayedItem.updateContainerClasses();
+            await this.detachReact();
+            await this._undisplay();
+        };
+        async _undisplay() {
+            if(this.reactedSet.size > 0) {
+                console.error("There should not be any mounted React components on an undisplayed DisplayedItem.");
+                this.reactedSet.forEach((react_el) => {
+                    console.log(react_el);
+                });
+            }
             this.emit("undisplay");
         }
         static doLog(obj: any, logFunc: (obj: any) => any, trace: string) {
@@ -408,40 +466,6 @@ namespace GameTools {
     export type Equals<X, Y> =
         (<T>() => T extends X ? 1 : 2) extends
         (<T>() => T extends Y ? 1 : 2) ? true : false;
-    function doRenderReact<T extends React.Component>(element: JSX.Element, container: HTMLElement, callback?: (component: T) => any) {
-        ReactDOM.render(element, container, function() {
-            if(callback != undefined && callback != null)
-                callback(this);
-        });
-        reactedSet.add(container);
-    }
-    export function getValue<T>(val: GameValue<T>, container?: HTMLElement): T {
-        let value: T;
-        if(val == null || val == undefined) {
-            value = null;
-        } else if(Object(val) !== val) {
-            value = ((val as unknown) as T);
-        } else if(val instanceof Function) {
-            value = val();
-        } else if(React.isValidElement(val)) {
-            if(container !== undefined) {
-                doRenderReact(val, container);
-                return undefined;
-            } else {
-                value = ((ReactDOMServer.renderToString(val) as unknown) as T);
-                console.warn("In most cases, rendering React components to a string will not give the desired behavior, " +
-                             "as event handlers and other related metadata will not be included.");
-            }
-            
-        } else {
-            value = (val.valueOf() as T);
-        }
-        if(container !== undefined) {
-            container.innerHTML = ((value as unknown) as string);
-            return undefined;
-        }
-        return value;
-    }
     export class InfoBox extends DisplayedItem {
         public static readonly defaultDelay = 1000;
         public $dialog: JQuery<HTMLElement>;
@@ -469,12 +493,12 @@ namespace GameTools {
             close_button.click(this.buttonCallback.bind(this));
             this.$dialog.find(".modal-header").append(close_button);
         }
-        async undisplay() {
+        async _undisplay() {
             await new Promise((resolve) => {
                 this.$dialog.one("hidden.bs.modal", () => resolve());
                 this.$dialog.modal('hide');
             });
-            await super.undisplay();
+            await super._undisplay();
         }
         protected dialogDisplayed() {
 
@@ -525,7 +549,7 @@ namespace GameTools {
 
                 if(this.title != null) {
                     this.$dialog.find(".modal-header").show();
-                    getValue(this.title, this.$title.get(0));
+                    DisplayedItem.getValue(this, this.title, this.$title.get(0));
                 } else {
                     this.$dialog.find(".modal-header").hide();
                 }
@@ -533,12 +557,12 @@ namespace GameTools {
                 if(this.text != null) {
                     this.$dialog.find(".modal-body").show();
                     if(!this.objStyle.useAsContainer) {
-                        getValue(this.text, this.$dialog.find(".modal-body").get(0));
+                        DisplayedItem.getValue(this, this.text, this.$dialog.find(".modal-body").get(0));
                     } else {
                         let header = modal_header.get(0);
                         let footer = this.$footer.get(0);
                         modal_content.empty();
-                        getValue(this.text, modal_content.get(0));
+                        DisplayedItem.getValue(this, this.text, modal_content.get(0));
                         let reactContainer = modal_content.children().get(0);
                         $(reactContainer).addClass("modal-body");
                         $(header).insertBefore(reactContainer);
@@ -559,7 +583,7 @@ namespace GameTools {
                 });
                 this.$dialog.find(".modal-footer").empty();
                 
-                let realText = getValue(this.buttonText);
+                let realText = DisplayedItem.getValue(this, this.buttonText);
                 let closeShown = false;
                 if(realText != null && realText != "") {
                     closeShown = true;
@@ -645,8 +669,8 @@ namespace GameTools {
             this.component = null;
             await super.reset();
         }
-        async undisplay() {
-            await super.undisplay();
+        async _undisplay() {
+            await super._undisplay();
             this.component = null;
         }
         async reactComponentUpdated() {
@@ -655,7 +679,7 @@ namespace GameTools {
         async dialogCreated() {
             this.$dialog.find(".modal-dialog").empty();
             await new Promise((resolve) => {
-                doRenderReact(this.jsxElement, this.$dialog.find(".modal-dialog").get(0), async() => {
+                this.doRenderReact(this.jsxElement, this.$dialog.find(".modal-dialog").get(0), async() => {
                     if(this.addContentClass) {
                         console.log("Adding content class");
                         let $container = this.$dialog.find(".modal-dialog").children();
@@ -691,7 +715,7 @@ namespace GameTools {
             this.levelMarkups.forEach((element, index) => {
                 
                 let $button = $("<button></button>");
-                getValue(element, $button.get(0));
+                DisplayedItem.getValue(this, element, $button.get(0));
                 $button.data("level-id", index);
                 $button.click(() => {
                     GameTools.currentLevel = $button.data("level-id");
@@ -715,7 +739,7 @@ namespace GameTools {
         if(!cb)
             cb = function() {};
         if(Modernizr.audio) {
-            var audio = new Audio(getValue(audioFile));
+            var audio = new Audio(DisplayedItem.getValue(this, audioFile));
             audio.onerror = function() {
                 cb();
             };
@@ -734,7 +758,7 @@ namespace GameTools {
         public gt_label: string;
         constructor(name: GameValue<string> = "") {
             super();
-            this.gt_label = getValue(name);
+            this.gt_label = DisplayedItem.getValue(this, name);
         }
         async display() {
             await super.display();
@@ -745,7 +769,7 @@ namespace GameTools {
             let theLabel: number = null;
             labels.some((e, index) => {
                 let label = (e as Label);
-                if(label.gt_label == getValue(indexVal)) {
+                if(label.gt_label == DisplayedItem.getValue(null, indexVal)) {
                     theLabel = array.indexOf(label);
                     return true;
                 }
@@ -754,7 +778,7 @@ namespace GameTools {
             return theLabel;
         }
         public static lookupItem(array: GameArray, indexVal: GameValue<string>): number {
-            let val = getValue(indexVal);
+            let val = DisplayedItem.getValue(null, indexVal);
             let label: number = Label.lookup(array, val);
             if(label != null)
                 return label;
@@ -794,7 +818,7 @@ namespace GameTools {
         async display() {
             await super.display();
             if(this.times < 0 || this.numLoops < this.times) {
-                var indexVal = getValue(this.loopInfo.index);
+                var indexVal = DisplayedItem.getValue(this, this.loopInfo.index);
                 if(typeof indexVal == "number") {
                     if(this.loopInfo.relative && this.myIndex() == -1)
                         throw "Not in gameContents array, cannot use relative branch";
@@ -928,7 +952,7 @@ namespace GameTools {
                     let containedItems = new Set<string>();
                     this.items.forEach((item) => {
                         if(item.target !== undefined && item.target == myName) {
-                            containedItems.add(getValue(item.name));
+                            containedItems.add(DisplayedItem.getValue(this, item.name));
                         }
                     });
                     $(element).children().each((index, child): false | void => {
@@ -974,9 +998,9 @@ namespace GameTools {
                 const target = item.target;
                 let $targetDiv = null;
                 if(target != null && target != undefined) {
-                    if(!targetNames.has(getValue(target))) {
+                    if(!targetNames.has(DisplayedItem.getValue(this, target))) {
                         let $span = $("<span></span>");
-                        getValue(target, $span.get(0));
+                        DisplayedItem.getValue(this, target, $span.get(0));
                         let $div = $("<div></div>").append($span).addClass("target");
                         $div.data("my-text", target);
                         $targetsDiv.append($div);
@@ -989,7 +1013,7 @@ namespace GameTools {
                             }, 3000));
                         }));
                         $div.children("i").hide();
-                        targetNames.set(getValue(target), $div.get(0));
+                        targetNames.set(DisplayedItem.getValue(this, target), $div.get(0));
         
                         $targetDiv = $div;
                         
@@ -1000,7 +1024,7 @@ namespace GameTools {
                         });
                         $targetDiv.tooltip('disable');
                     } else {
-                        $targetDiv = $(targetNames.get(getValue(target)));
+                        $targetDiv = $(targetNames.get(DisplayedItem.getValue(this, target)));
                     }
                 }
                 const backColor = HSLToHex(getRandomInt(0, 360), 100, 90);
@@ -1009,7 +1033,7 @@ namespace GameTools {
                     "color": getContrastYIQ(backColor)
                 });
                 let $tmpDiv = $("<div></div>").css("margin", "auto");
-                getValue(item.name, $tmpDiv.get(0));
+                DisplayedItem.getValue(this, item.name, $tmpDiv.get(0));
                 $div.append($tmpDiv);
                 $itemsDiv.append($div);
             });
@@ -1103,7 +1127,7 @@ namespace GameTools {
         }
         async display() {
             await super.display();
-            if(getValue(this.customCondition))
+            if(DisplayedItem.getValue(this, this.customCondition))
                 this.trueStatement.display();
             else
                 this.falseStatement.display();
@@ -1145,14 +1169,14 @@ namespace GameTools {
             await new Promise((resolve) => {
                 this.$svgContainer = $("<div></div>");
                 this.$svgContainer.addClass("interactive-svg");
-                this.$svgContainer.load(getValue(this.imgSrc), () => {
+                this.$svgContainer.load(DisplayedItem.getValue(this, this.imgSrc), () => {
                     this.svgElement = (this.$svgContainer.find("svg").get(0) as Element as SVGElement);
                     let loadCallback = () => {
                         if(this.interactiveComponents)
                             this.interactiveComponents.forEach((selector, index) => {
                                 var svg = this.svgElement;
         
-                                let elements = svg.querySelectorAll(getValue(selector));
+                                let elements = svg.querySelectorAll(DisplayedItem.getValue(this, selector));
                                 elements.forEach(element => {
                                     $(element).addClass("interactive-component");
                                     $(element).click((e) => {
@@ -1169,8 +1193,8 @@ namespace GameTools {
                 $(window).on("resize", InteractiveSVG.scrollHandler);
             });
         }
-        async undisplay() {
-            await super.undisplay();
+        async _undisplay() {
+            await super._undisplay();
             $(window).off("resize", InteractiveSVG.scrollHandler);
         }
     }
@@ -1292,7 +1316,7 @@ namespace GameTools {
 
             if(this.instructions != null) {
                 let $span = $("<span></span>");
-                getValue(this.instructions, $span.get(0));
+                DisplayedItem.getValue(this, this.instructions, $span.get(0));
                 $body.append($span);
             }
                 
@@ -1301,9 +1325,9 @@ namespace GameTools {
             this.buttons.forEach((element, index) => {
                 var $button = $("<button></button>");
                 if(!Finder.isLinkedItem(element))
-                    getValue(element, $button.get(0));
+                    DisplayedItem.getValue(this, element, $button.get(0));
                 else
-                    getValue(element.button, $button.get(0));
+                    DisplayedItem.getValue(this, element.button, $button.get(0));
                 if(this.foundIndexes.indexOf(index) != -1) {
                     $button.addClass("was_found");
                 }
@@ -1417,12 +1441,12 @@ namespace GameTools {
             await super.dialogCreated();
             var $body = this.$dialog.find(".modal-body");
             let $instructionsDiv = $("<div></div>").appendTo($body);
-            getValue(this.instructions, $instructionsDiv.get(0));
+            DisplayedItem.getValue(this, this.instructions, $instructionsDiv.get(0));
             var $finderButtons = $("<div></div>").addClass("finder-buttons").appendTo($body);
             console.log("Button finder created");
             shuffle(this.choices, this.objStyle.shouldShuffle).forEach((element, index) => {
                 var $button = $("<button></button>");
-                getValue(element.html, $button.get(0));
+                DisplayedItem.getValue(this, element.html, $button.get(0));
                 if(this.objStyle.shouldColorBackgrounds)
                     colorBackground($button);
                 $button.data("index", index);
@@ -1459,7 +1483,6 @@ namespace GameTools {
         $("#gametools-container").append($("<div></div>").addClass("background-img").attr("id", 'bk-im-0'));
         $("#gametools-container").append($("<div></div>").addClass("background-img").attr('id', 'bk-im-1'));
         $("#gametools-container").append($("<div></div>").addClass("gametools-overlay"));
-        reactedSet = new Set<HTMLElement>();
         visibleStack = [];
         moment.updateLocale('en', {
             relativeTime : {
@@ -1502,32 +1525,7 @@ namespace GameTools {
         $(document).on('hidden.bs.modal', '.modal', function () {
             $('.modal:visible').length && $(document.body).addClass('modal-open');
         });
-        var observer = new MutationObserver(function(mutations) {
-            // check for removed target
-            mutations.forEach(function(mutation) {
-                var nodes = Array.from(mutation.removedNodes);
-                nodes.forEach(element => {
-                    if(isElement(element)) {
-                        let html = (element as HTMLElement);
-                        
-                        reactedSet.forEach((element) => {
-                            if($(html).is($(element)) || $.contains(html, element)) {
-                                ReactDOM.unmountComponentAtNode(element);
-                                reactedSet.delete(element);
-                            }
-                        });
-                    }
-                    
-                });
 
-            });
-        });
-
-        var config = {
-            subtree: true,
-            childList: true
-        };
-        observer.observe(document.body, config);
         BrowserDetect.init();
         $(window).resize(handleResize);
     }
@@ -1571,7 +1569,7 @@ namespace GameTools {
         }
         async display() {
             await super.display();
-            let conditionVal: T = getValue(this.value);
+            let conditionVal: T = DisplayedItem.getValue(this, this.value);
             let defaultCase: DefaultSwitchCase<T> = null;
             let wasHandled: boolean;
             let shouldDisplayNext: boolean;
@@ -1661,7 +1659,7 @@ namespace GameTools {
     export function label<T extends GameArrayItem>(label: GameValue<string> = "", item?: T): LabelledItem&T {
         if(item !== undefined) {
             let li = (item as unknown as LabelledItem);
-            li.gt_label = getValue(label);
+            li.gt_label = DisplayedItem.getValue(this, label);
             return li as LabelledItem&T;
         } else {
             return new Label(label) as LabelledItem&T;
@@ -1670,7 +1668,7 @@ namespace GameTools {
     }
     export function help<T extends GameArrayItem>(item: T, help: GameValue<string>): ContextualHelpItem&T {
         let hi = (item as unknown as ContextualHelpItem);
-        hi.gt_help = getValue(help);
+        hi.gt_help = DisplayedItem.getValue(this, help);
         return hi as ContextualHelpItem&T;
     }
     export async function startDisplay(array: GameArray) {
@@ -1678,7 +1676,7 @@ namespace GameTools {
         await GameTools.restart(array);
     }
     export function scope<T extends DisplayedItem>(array: GameValue<GameArray>, item: T): T {
-        item.parentArray = getValue(array);
+        item.parentArray = DisplayedItem.getValue(this, array);
         return item;
     }
     export interface ListComponentProps{
@@ -1806,7 +1804,7 @@ namespace GameTools {
         getPageFromSlug(slug: string, allowNull = false): InfoPageItem {
             let page: InfoPageItem = null;
             this.props.pages.some((pageItem) => {
-                if(slugify(getValue(pageItem.name)) == slug) {
+                if(slugify(DisplayedItem.getValue(null, pageItem.name)) == slug) {
                     page = pageItem;
                     return true;
                 }
@@ -1817,7 +1815,7 @@ namespace GameTools {
             return page;
         }
         getPageInfo(routeProps) {
-            return { __html: getValue(this.getPageFromSlug(routeProps.match.params.id).info)};
+            return { __html: DisplayedItem.getValue(null, this.getPageFromSlug(routeProps.match.params.id).info)};
         }
         componentDidMount() {
             let body = $(this.navRef.current).parent();
@@ -1827,7 +1825,7 @@ namespace GameTools {
         render() {
             let pageLinks: JSX.Element[] = [];
             this.props.pages.forEach((page) => {
-                let value = getValue(page.name);
+                let value = DisplayedItem.getValue(null, page.name);
                 pageLinks.push(<NavTab className="nav-link" activeClassName="active" to={"/" + slugify(value)}>{value}</NavTab>);
             });
             this.navRef = React.createRef();
@@ -1864,7 +1862,7 @@ namespace GameTools {
         if(React.isValidElement(props.val)) {
             return (props.val as JSX.Element);
         }
-        return <>{getValue(props.val)}</>;
+        return <>{DisplayedItem.getValue(this, props.val)}</>;
     }
     export function NewspaperFigure(props: { src: string; caption?: string }) {
         return <figure className="media">
@@ -2161,10 +2159,10 @@ namespace GameTools {
         }
         stopAnimation() {
         }
-        async undisplay() {
+        async _undisplay() {
             this.shouldContinue = false;
             this.stopAnimation();
-            await super.undisplay();
+            await super._undisplay();
         }
         async animateNextImage() {
             await sleep(2000);
@@ -2400,7 +2398,7 @@ namespace GameTools {
                     });
                     $($img.get(SetBackground.nextIndex)).css("background-image", 'url(' + bgImg.src + ')');
                 };
-                bgImg.src = getValue(this.newsrc);
+                bgImg.src = DisplayedItem.getValue(this, this.newsrc);
             } else {
                 $("#gametools-container").removeClass("bkgd-shown");
                 $($img.get(SetBackground.nextIndex ^ 1)).css("background-image", "none");
@@ -2421,7 +2419,7 @@ namespace GameTools {
         async dialogCreated() {
             await super.dialogCreated();
             const $button = $("<button></button>").addClass("business-card");
-            getValue(this.cardContents, $button.get(0));
+            DisplayedItem.getValue(this, this.cardContents, $button.get(0));
             this.$dialog.find(".modal-content").remove();
             this.$dialog.find(".modal-dialog").append($button);
             $button.on("click", (e) => {
@@ -2630,11 +2628,12 @@ namespace GameTools {
         return item;
     }
     export class AddToNotebook extends DisplayedItem {
-        constructor(protected list: Set<NotebookItem>, protected items: (NotebookItem|Array<NotebookItem>), protected showItem?: boolean) {
+        constructor(protected list: GameValue<Set<NotebookItem>>, protected items: (NotebookItem|Array<NotebookItem>), protected showItem?: boolean) {
             super();
         }
         async display() {
             let firstItem: GameArrayItem = null;
+            let realList = DisplayedItem.getValue(null, this.list);
             if(Array.isArray(this.items)) {
                 console.log("Is iterable");
                 console.log(this.items);
@@ -2643,12 +2642,12 @@ namespace GameTools {
                 this.items.forEach((item, index) => {
                     if(index == 0)
                         firstItem = item.noteBookLink;
-                    this.list.add(item);
+                        realList.add(item);
                 });
             } else {
                 if(this.showItem == undefined)
                     this.showItem = true;
-                this.list.add(this.items);
+                    realList.add(this.items);
                 firstItem = this.items.noteBookLink;
             }
             await super.display();
@@ -2662,6 +2661,48 @@ namespace GameTools {
                 item.display();
             } else
                 this.displayNext();
+        }
+    }
+    export function pad(num: number, width: number, z?: string): string {
+        z = z || '0';
+        if(z.length != 1)
+            throw new Error("Third parameter should be exactly one character.");
+        let n: string = num + '';
+        return n.length >= width ? n : new Array(width - n.length + 1).join(z) + n;
+    }
+    type RemoveFirstFromTuple<T extends any[]> = 
+        T['length'] extends 0 ? undefined :
+        (((...b: T) => void) extends (a, ...b: infer I) => void ? I : []);
+    export function invokeOn<T, F extends (this: T, ...args: any) => any>(obj: T, fn: F, ...args: Parameters<F>): T {
+        fn.call(obj, args);
+        return obj;
+    }
+    export function pl_undef<T>(val: T, defaultVal: T, handleNull = false): T {
+        let useDefault = false;
+        if(val == undefined)
+            useDefault = true;
+        else if(handleNull && val == null)
+            useDefault = true;
+        if(useDefault)
+            return defaultVal;
+        else
+            return val;
+    }
+    export class SpinningClock extends React.Component<{ startHourAngle?: number; startMinuteAngle?: number; startSecondAngle?: number;}> {
+        render() {
+            return <div className="clocks single local linear clock-fast">
+                <article className="clock ios7 show">
+                    <div className="hours-container">
+                        <div className="hours angled" style={{transform: `rotateZ(${pl_undef(this.props.startHourAngle, 0)}deg`}}></div>
+                    </div>
+                    <div className="minutes-container">
+                        <div className="minutes angled" style={{transform: `rotateZ(${pl_undef(this.props.startMinuteAngle, 0)}deg`}}></div>
+                    </div>
+                    <div className="seconds-container">
+                        <div className="seconds angled" style={{transform: `rotateZ(${pl_undef(this.props.startSecondAngle, 0)}deg`}}></div>
+                    </div>
+                </article>
+            </div>;
         }
     }
 }
@@ -2683,7 +2724,7 @@ class CreatureCard extends GameTools.InfoBox {
         let rightDiv = $("<div></div>");
         rightDiv.append("<h4>" + this.name + "</h4><h5>" + this.taxonomy + "</h5>");
         const $infoDiv = $("<div></div>");
-        GameTools.getValue(this.info, $infoDiv.get(0));
+        GameTools.DisplayedItem.getValue(this, this.info, $infoDiv.get(0));
         rightDiv.append($infoDiv);
         this.$content.append(rightDiv);
     }
@@ -2723,6 +2764,7 @@ import whale from './external/whale.svg';
 import barrels from './external/barrels.png';
 import seaweed from './external/seaweed.png';
 import diver from './external/diver.svg';
+import { SSL_OP_EPHEMERAL_RSA } from "constants";
 
 let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="Routine Rambler" subhead="" articles={[
     {
@@ -2800,6 +2842,38 @@ let day2Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
     }
 ]}/>);
 
+let day3Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="Routine Rambler" articles={[
+    {
+        headline: "Salmon Shakes are Here!",
+        content: <>
+            The wise and mysterious Dr. Salman Wise, Ph.D has announced his latest concoction, Salmon Shakes! When asked
+            for further details, Dr. Wise replied:
+            <p></p>
+            <blockquote>With all of the hype about smoothies and eating healthier in general, I figured that using salmon
+                in smoothies was a natural strategy.
+            </blockquote>
+            <p></p>
+            Dr. Wise also mentioned that he has yet to receive any customers.
+        </>
+    },
+    {
+        headline: "BREAKING: Whale Contamination Case Update",
+        content: <>
+            Tremendous steps have been taken in the whale contamination case. The contaminant has been traced to a salmon population
+            northeast of this island.
+            <p></p>
+            The <i>Routine Rambler</i> is still unsure at this time exactly who has been collecting all of this data.
+            PORPIS has not returned any emails sent by our reporters.
+            <p></p>
+            Martin Mersenich assures citizens that there is no need to worry.
+            <blockquote>
+                I see little cause for alarm. There is lots to do around here, especially with the new Pancake Mansion
+                opening tomorrow.
+            </blockquote>
+        </>
+    }
+]}/>);
+
 export function BusStop(props) {
     return <><img src={require('./external/images/bus-stop.svg')}/>{props.children}</>;
 }
@@ -2816,9 +2890,101 @@ function getEquivalentCodeLetter(letter: string): string {
 
 let day1_notebookitems: GameTools.NotebookItem[] = [];
 let day2_notebookitems: GameTools.NotebookItem[] = [];
+let day3_notebookitems: GameTools.NotebookItem[] = [];
+let day4_notebookitems: GameTools.NotebookItem[] = [];
+
+let defaultChartOptions: Chart.ChartDataSets = {
+    fill: false,
+    lineTension: 0.4,
+    borderCapStyle: 'butt',
+    borderDash: [],
+    borderDashOffset: 0.0,
+    borderJoinStyle: 'miter',
+    pointBorderWidth: 1,
+    pointHoverRadius: 5,
+    pointHoverBorderWidth: 2,
+    pointRadius: 1,
+    pointHitRadius: 10,
+};
+
+let chartScales: Chart.ChartScales = {
+    yAxes: [
+        {
+            scaleLabel: {
+                display: true,
+                labelString: 'Height',
+            },
+            ticks: {
+                // Include a dollar sign in the ticks
+                callback: (value) => (value + 'm')
+            },
+            id: "height-axis",
+        },
+        {
+            scaleLabel: {
+                display: true,
+                labelString: 'Salt Content',
+            },
+            ticks: {
+                // Include a dollar sign in the ticks
+                callback: (value) => (value + 'ppt')
+            },
+            id: "salt-axis",
+            position: 'right'
+        }
+    ],
+    xAxes: [
+        {
+            scaleLabel: {
+                display: true,
+                labelString: 'Time'
+            }
+        }
+    ]
+};
+
+let globalChartOptions: Chart.ChartOptions = {
+    title: {
+        display: true,
+        text: "Tide Graph"
+    },
+    legend: {
+        display: false
+    },
+    scales: chartScales,
+    plugins: {
+        colorschemes: {
+            scheme: Aspect6
+        }
+    },
+    tooltips: {
+        mode: 'index'
+    }
+};
+
+let day3_question = (isQuestion: boolean) => {
+    let data: Chart.ChartData = {
+        labels: (function() {
+            let arr = [];
+            for(var i = 6; i <= 18; i += 3) {
+                arr.push(`${GameTools.pad(i, 2)}:00`);
+            }
+            return arr;
+        })(),
+        datasets: [
+            Object.assign({}, defaultChartOptions, { label: 'Height', data: [ 2.4, 0.7, 0.7, 2.2, 2.9 ], yAxisID: 'height-axis' }),
+        ]
+    };
+    if(isQuestion) {
+        data.datasets.push(Object.assign({}, defaultChartOptions, { label: 'Salt Content', data: [ 3.4, 0.8, 0.5, 3.1, 3.5 ], yAxisID: 'salt-axis' }));
+        data.datasets.push(Object.assign({}, defaultChartOptions, { label: 'Toxin Level', data: [ 1.2, 0.1, 0.0, 1.1, 1.5 ] }));
+    }
+    return <Line data={data} options={globalChartOptions}/>;
+};
+
 let myArray = [
     new GameTools.Invoke(() => GameTools.warnUser()),
-    new GameTools.Loop({ index: "day2_quizpassed"}),
+    GameTools.label("chapter_selection"),
     new GameTools.MultipleChoiceQuestion("Choose a chapter.", [
         { html: "Chapter 1" },
         { html: "Chapter 2" },
@@ -2826,10 +2992,10 @@ let myArray = [
         { html: "Chapter 4" }
     ], false, { shouldColorBackgrounds: false, shouldShuffle: false, showCorrectConfirmation: false }),
     new GameTools.SystemReset(),
+    new GameTools.Invoke(() => notebookList = new Set()),
     new GameTools.Loop({ index: () => "chapter" + (GameTools.lastData + 1)}),
     // ---------------------------- CHAPTER 1 --------------------------------
     GameTools.label("chapter1"),
-    new GameTools.Invoke(() => notebookList = new Set()),
     new GameTools.SetBackground(require('./external/images/office.svg')),
     new GameTools.ButtonFinder("Explore Anna Atlantic's office!", "", [
         { button: <>
@@ -2969,7 +3135,7 @@ let myArray = [
         controller.showCloseButton();
     }),
     GameTools.label("firstCreatureCard"),
-    new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day1_notebookitems, GameTools.noteBookItem("Creature card", () => new CreatureCard(`${getEquivalentCodeLetter('Y')} ${getEquivalentCodeLetter('Z')}`, require('./external/images/sunflowerstar.jpg'), "Sunflower star", "Pycnopedia helianthoides", <p>
+    new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day1_notebookitems, GameTools.noteBookItem("Creature card", () => new CreatureCard(`${getEquivalentCodeLetter('Y')} ${getEquivalentCodeLetter('Z')}`, require('./external/images/sunflowerstar.jpg'), "Sunflower star", "Pycnopedia helianthoides", <p>
         The sunflower star is a large sea star found in the northeast Pacific. The only species of its genus, it is among the largest sea stars in the world (but not quite the largest),
         with a maximum arm span of 1 m (3.3 ft). Sunflower sea stars usually have 16 to 24 limbs; their color can vary widely. They are predatory, feeding mostly on sea urchins,
         clams, snails, and other small invertebrates. Although the species had been widely distributed throughout the northeast Pacific, its population has rapidly declined since 2013.
@@ -2986,11 +3152,12 @@ let myArray = [
     }, {
         "getMessage": () => codedCode
     }),
-    new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day1_notebookitems, GameTools.noteBookItem("Coded message", () => new GameTools.InfoBox("Coded message", "<p>The code is:</p><p><b>" + codedCode + "</b></p>"))), false),
+    new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day1_notebookitems, GameTools.noteBookItem("Coded message", () => new GameTools.InfoBox("Coded message", "<p>The code is:</p><p><b>" + codedCode + "</b></p>"))), false),
+    new GameTools.Loop({ index: "chapter_selection" }),
     // ---------------------------- CHAPTER 2 --------------------------------
     GameTools.label("chapter2"),
     new GameTools.Invoke(() => notebookList = new Set()),
-    new GameTools.AddToNotebook(notebookList, day1_notebookitems),
+    new GameTools.AddToNotebook(() => notebookList, day1_notebookitems),
     new GameTools.SetBackground(require('./external/images/office.svg')),
     new GameTools.ButtonFinder("Explore Anna Atlantic's office!", "", [
         { button: <>
@@ -3015,7 +3182,7 @@ let myArray = [
             <img src={require('./external/images/creature_card.svg')}/>
             Creature card
         </>,
-        link: new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Creature card", () => new CreatureCard(`${getEquivalentCodeLetter('Q')} ${getEquivalentCodeLetter('R')}`, require('./external/images/pacific_scallop.jpg'), "Pacific pink scallop", "Chlamys hastata", <p>
+        link: new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Creature card", () => new CreatureCard(`${getEquivalentCodeLetter('Q')} ${getEquivalentCodeLetter('R')}`, require('./external/images/pacific_scallop.jpg'), "Pacific pink scallop", "Chlamys hastata", <p>
             Pacific pink scallops are part of a large class of molluscs, also known as pelecypods.
             <br/>
             They have a hard calcareous shell made of two parts or 'valves'. The soft parts are inside the shell. The shell is usually bilaterally symmetrical.
@@ -3107,7 +3274,7 @@ let myArray = [
     </>),
     new GameTools.SetBackground(require('./components/grass.svg')),
     new GameTools.InfoBox("You", "You hide in the bushes so you can text Dr. Wise and tell him about the situation. Meanwhile, you find this..."),
-    new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Creature Card", () => new CreatureCard(`${getEquivalentCodeLetter('O')} ${getEquivalentCodeLetter('P')}`, require('./external/images/plumose.jpg'), "Plumose anemone", "Metridium giganteum", <p>
+    new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Creature Card", () => new CreatureCard(`${getEquivalentCodeLetter('O')} ${getEquivalentCodeLetter('P')}`, require('./external/images/plumose.jpg'), "Plumose anemone", "Metridium giganteum", <p>
         Plumose anemones are sea anemones found mostly in the cooler waters of the northern Pacific and Atlantic oceans.
         They are characterized by their numerous threadlike tentacles extending from atop a smooth cylindrical column,
         and can vary from a few centimeters in height up to one meter or more.
@@ -3127,7 +3294,7 @@ let myArray = [
         toggleInputDisabled();
     }),
     GameTools.label("day2_mapimage"),
-    new GameTools.AddToNotebook(notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Salmon map",
+    new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Salmon map",
         () => new GameTools.InfoBox("Salmon map", <GameTools.ZoomableSVG style={{padding: "1em"}} src={require('./external/images/map.svg')} visibleLayers={[ "Basemap", "Layer 2"]}/>)))),
     new GameTools.MultipleChoiceQuestion("What are salmon likely to be eating?", [
         { html: "Herring", correct: true},
@@ -3184,15 +3351,122 @@ let myArray = [
         GameTools.DialogueExperience.doReenableInput = true;
         controller.showCloseButton();
     }),
+    new GameTools.Loop({ index: "chapter_selection" }),
+    // --------------------------- CHAPTER 3 ---------------------------
+    GameTools.label("chapter3"),
+    new GameTools.SetBackground(require('./external/images/office.svg')),
+    new GameTools.Invoke(() => notebookList = new Set()),
+    new GameTools.AddToNotebook(() => notebookList, day1_notebookitems),
+    new GameTools.AddToNotebook(() => notebookList, day2_notebookitems),
+    new GameTools.Invoke(() => console.log(notebookList)),
+    day3Newspaper,
+    new GameTools.DialogueExperience(require('./external/tasman.rive'), "Dr. MacDonald", null, [
+
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Hi! Your boss told me all about your search for these barrels.");
+        await controller.sendMessage("I'm currently camping near the salmon population.");
+        await controller.sendMessage("Before we get started, why don't you take a look at this tide graph?");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day3_notebookitems, GameTools.noteBookItem("Tide Graph", () => new GameTools.ReactInfoBox(<div>
+        <GameTools.ModalTitleBar showClose={true}/>
+        {day3_question(false)}
+        </div>)))),
+    new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day3_notebookitems, GameTools.noteBookItem("Creature Card", () => new CreatureCard(`${getEquivalentCodeLetter('E')} ${getEquivalentCodeLetter('F')}`, require('./external/images/gga.jpg'), "Giant green anemone", "Anthopleura xanthogrammica", <p>
+        Giant green anemones are sea anemones commonly found in the Pacific Ocean.
+        <br/>
+        Algae live in the anemone's tissues. The anemone's green color is caused by the algae as well as pigmentation.
+    </p>)))),
+    new GameTools.DialogueExperience(require('./external/tasman.rive'), "Dr. MacDonald", null, [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Pretty interesting, huh?\nI decided I should come and test the water in the estuary near the suspected contamination.");
+        await controller.sendMessage("The neat thing about estuaries is that they have a mix of freshwater from the rivers and saltwater in the ocean.");
+        await controller.sendMessage("Why don't you analyze my results by taking a look at this quiz?");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    new GameTools.MultipleChoiceQuestion("At 10:00 AM, was the water mostly freshwater or mostly saltwater?", [
+        { html: "Freshwater", correct: true },
+        { html: "Saltwater", }
+    ], true, undefined, day3_question(true)),
+    new GameTools.MultipleChoiceQuestion("Is the toxicity of the water higher when the salinity is higher?", [
+        { html: "No" },
+        { html: "Yes", correct: true }
+    ], true, { showCorrectConfirmation: false }, day3_question(true)),
+    new GameTools.DialogueExperience(require('./external/tasman.rive'), "Dr. MacDonald", null, [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Right.\nIt looks like the contaminent is coming from the ocean and not the estuary.");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    new GameTools.MultipleChoiceQuestion("Dr. MacDonald: It's 7 AM now. What time will the next low tide be?", [
+        { html: "3-4 hours", correct: true },
+        { html: "6-7 hours" },
+        { html: "11 hours"}
+    ], true, { showCorrectConfirmation: false }, day3_question(true)),
+    new GameTools.DialogueExperience(require('./external/tasman.rive'), "Dr. MacDonald", null, [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Alright.\nI'm sending out a crew to test the mussels on the coastline.");
+        await controller.sendMessage("Once I get the results, I'll text you.\n(There is free WiFi at the Pancake Mansion, so it's cheaper from there.)");
+        await controller.sendMessage("Before you go, let me send you a copy of this.");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day3_notebookitems, GameTools.noteBookItem("Creature Card", () => new CreatureCard(`${getEquivalentCodeLetter('G')} ${getEquivalentCodeLetter('H')}`, require('./external/images/barnacle.jpg'), "Giant acorn barnacles", "Balanus nubilus", <p>
+        A barnacle is a cirripede, a kind of crustacean. It is covered with hard plates of calcium carbonate, and lives stuck to hard surfaces.
+        <br/>
+        Barnacles are suspension feeders, sweeping small food into their mouth with their curved 'feet'.
+        They are cemented to rock (usually), and covered with hard calcareous plates, which they shut firmly when the tide goes out.
+    </p>)))),
+    GameTools.label("chart_testing"),
+    GameTools.invokeOn(new GameTools.ReactInfoBox(<GameTools.SpinningClock startHourAngle={30*8}/>, null), function() {
+        this.once("display", async() => {
+            await GameTools.sleep(4000);
+            this.buttonCallback(null);
+        });
+    }),
+    new GameTools.DialogueExperience(require('./external/tasman.rive'), "Dr. MacDonald", null, [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Wow! It looks like the barrels are located right around where we first spotted the whale population.");
+        await controller.sendMessage("The only problem is that we're going to need more help to pinpoint the exact location.");
+        await controller.sendMessage("Your boss is flying here tomorrow.\nMaybe she knows somebody with that kind of equipment.");
+        await controller.sendMessage("Anyways, sleep well! We're really close to the end now.");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    new GameTools.Loop({ index: "chapter_selection" }),
 ];
+
+
+function whatever() {
+    setTimeout(function() {
+        setTimeout(function() {
+            setTimeout(function() {
+
+            }, 3000);
+        }, 3000);
+    }, 3000);
+}
 
 (window as any).gt_imagePaths = Object.assign({}, require('./external/images/*.png'), require('./external/images/*.jpg'), require('./external/images/*.svg'));
 
 $(async function() {
+    console.log(process.env.NODE_ENV);
+    let badge = undefined;
+    if(process.env.NODE_ENV == 'production') {
+        await GameTools.sleep(3000-((window as any).load_endDate - (window as any).load_startDate));
+    } else
+        badge = <span>&nbsp;<span className="badge badge-secondary">development version</span></span>;
     GameTools.monkeyPatch();
     GameTools.helpRef = React.createRef();
     ReactDOM.render(<>
-        <span className="top-title">{document.title}</span>
+        <span className="top-title">{document.title}{badge}</span>
         <div className="top-buttons">
             <GameTools.ControlButton onClick={showNotebook} name="Notebook" icon="fas fa-clipboard" colorClass="btn-success"/>
             <GameTools.ControlButton onClick={showFieldGuide} name="Field Guide" icon="fas fa-book" colorClass="btn-primary"/>
