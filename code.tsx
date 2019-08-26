@@ -19,6 +19,8 @@ import './external/jquery.ui.touch-punch.min.js';
 import 'popper.js';
 import 'bootstrap';
 
+import './components/shortcut.js';
+
 /*
 require('./styles.scss');
 require('./external/jquery.svg.min');
@@ -1222,6 +1224,8 @@ namespace GameTools {
                 this.parent.$dialog.find(".modal-title").text(this.template(this.itemsFound, this.numItems));
         }
         static isLinkedItem<T>(item: FinderItem<T>): item is FinderLinkedItem<T> {
+            if(item == undefined || item == null)
+                return false;
             let b_item = item as FinderLinkedItem<T>;
             return (b_item.button != undefined && b_item.link != undefined);
         }
@@ -1262,6 +1266,7 @@ namespace GameTools {
         }
         public itemsFound = 0;
         interactiveComponentClicked($component: JQuery<SVGElement>): void {
+            GameTools.lastData = $component;
             this.finder.itemFound($component);
         }
         async reset() {
@@ -2142,7 +2147,7 @@ namespace GameTools {
         shouldContinue: boolean;
         allowClicks: boolean;
         holeFinder: JQuery<HTMLElement>;
-        constructor(protected randomImages: string[], protected customClasses = "") {
+        constructor(protected randomImages: string[], protected customClasses = "", protected hasCorrect = true, protected somethingElseString = "Try something else") {
             super(null, null, null);
         }
         newIndex() {
@@ -2314,7 +2319,7 @@ namespace GameTools {
             };
             this.observer = new IntersectionObserver((entries) => {
                 if(entries.length > 1)
-                    throw new Error("Not expecting multiple entries (" + entries.length + ")");
+                    console.error("Not expecting multiple entries (" + entries.length + ")");
                 this.currentRatio = entries[0].intersectionRatio;
             }, options);
             window.requestAnimationFrame(() => {
@@ -2332,7 +2337,7 @@ namespace GameTools {
                 let errorMessage = "";
                 if(this.currentRatio >= 0.5) {
                     let index = parseInt(this.currentImage.getAttribute("data-index"));
-                    if(index == 0) {
+                    if(this.hasCorrect && index == 0) {
                         foundItem = true;
                     } else
                         errorMessage = "That isn't what we're looking for. Try again.";
@@ -2343,17 +2348,38 @@ namespace GameTools {
                     return;
                 }
 
+                
+
+                const _self = this;
+                let customInfoBox = class extends InfoBox {
+                    async dialogCreated() {
+                        await super.dialogCreated();
+                        if(!_self.hasCorrect)
+                            this.$footer.append($("<button></button>").addClass("btn btn-secondary").html(_self.somethingElseString).addClass("gt-hole-something-else"));
+                    }
+                    buttonCallback(e: JQuery.ClickEvent) {
+                        if($(e.target).hasClass("gt-hole-something-else")) {
+                            this.once("undisplay", () => _self.displayNext());
+                        }
+                        super.buttonCallback(e);
+                    }
+                };
+                let infoBoxMade = async(infoBox: InfoBox) => {
+                    await infoBox.display();
+                };
                 domtoimage.toPng(this.holeFinder.get(0), {
                     style: {
                         boxShadow: "none"
                     }
                 }).then(async(dataUrl) => {
                     dataUrl = await HoleFinder.cropImageURL(dataUrl);
-                    await new InfoBox("Hmm...", "<img class='gt-preview-image' src='" + dataUrl + "'/><hr/>" + errorMessage, "OK", 0).display();
+                    let infoBox = new customInfoBox("Hmm...", "<img class='gt-preview-image' src='" + dataUrl + "'/><hr/>" + errorMessage, "OK", 0);
+                    await infoBoxMade(infoBox);
                     this.allowClicks = true;
                 }, async(reason) => {
                     console.error(reason);
-                    await new InfoBox("Hmm...", errorMessage, "OK", 0).display();
+                    let infoBox = new customInfoBox("Hmm...", errorMessage, "OK", 0);
+                    await infoBoxMade(infoBox);
                     this.allowClicks = true;
                 });
             });
@@ -2874,13 +2900,47 @@ let day3Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="R
     }
 ]}/>);
 
+let day4Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="Routine Rambler" articles={[
+    {
+        headline: "Martin Mersenich Finds World's Largest Whale!",
+        content: <>
+            Martin Mersenich discovered what he believes to be the world's largest whale while playing beach volleyball.
+            <p></p>
+            When asked to comment, he said:
+            <blockquote>
+                I was playing with some pretty blind volleyball players. When I discovered the whale, they all turned
+                their heads and basically let me score a free point!
+            </blockquote>
+            <p></p>
+            The other players denied that there was any whale present during the game.
+        </>
+    },
+    {
+        headline: "Headway Made in Whale Contamination Case",
+        content: <>
+            PORPIS and its associated agencies are almost ready to reveal the cause of the recent whale contamination.
+            <p></p>
+            Captain Andrea Atkins of the S.S. Symphonica has announced that she is dedicating all of her staff and
+            equipment to solving the remaining pieces of the puzzle.
+            <p></p>
+            When asked for his opinion, Martin Mersenich doubted that "any of these clowns" could solve the case.
+            <blockquote>
+                At this point, I'm pretty sure I know more about the situation than PORPIS or any of these other people.
+                I could probably solve the case in a matter of seconds if I had the time.
+            </blockquote>
+            <p></p>
+            Martin Mersenich also seemed to be in a hurry to leave during the interview.
+        </>
+    }
+]}/>);
+
 export function BusStop(props) {
     return <><img src={require('./external/images/bus-stop.svg')}/>{props.children}</>;
 }
 
 let shift = 12; /* Code shift */
 
-let realCode = "They'll never find my secret or I'm not Martin Mersenich.";
+let realCode = atob("VGhleSdsbCBuZXZlciBmaW5kIG15IHNlY3JldCBvciBJJ20gbm90IE1hcnRpbiBNZXJzZW5pY2gu");
 
 let codedCode = GameTools.codeify(GameTools.caesarShift(realCode, shift));
 
@@ -2984,6 +3044,7 @@ let day3_question = (isQuestion: boolean) => {
 
 let myArray = [
     new GameTools.Invoke(() => GameTools.warnUser()),
+    new GameTools.Loop({ index: "interactiveTest"}),
     GameTools.label("chapter_selection"),
     new GameTools.MultipleChoiceQuestion("Choose a chapter.", [
         { html: "Chapter 1" },
@@ -3441,22 +3502,118 @@ let myArray = [
         controller.showCloseButton();
     }),
     new GameTools.Loop({ index: "chapter_selection" }),
+    // ------- Chapter 4 -----------
+    GameTools.label("chapter4"),
+    new GameTools.SetBackground(require('./external/images/office.svg')),
+    day4Newspaper,
+    new GameTools.DialogueExperience(null, "Anna Atlantic", null, [
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Hey Ace!");
+        await controller.sendMessage("It was a ridiculous flight to here.\nThe plane was vibrating like crazy inside!\nPlus, there were nonstop advertisements about Trivago.");
+        await controller.sendMessage("I've run out of leads, so the only way to solve this case will be to find those barrels.");
+        await controller.sendMessage("I booked you an early morning flight.\nI want you here quickly so that we can join Captain Atkins and her crew as soon as possible.");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    new GameTools.SetBackground(require('./external/images/airport.jpg')),
+    new GameTools.Delay(3000),
+    new GameTools.SetBackground(require('./components/water.svg')),
+    new GameTools.Delay(3000),
+    new GameTools.DialogueExperience(require('./external/atkins.rive'), "Captain Atkins", null, [
+        "Not particularly... there was junk all over the seats! Also, the flight attendant was really rude."
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Welcome!");
+        await controller.sendMessage("I hope you had a comfortable flight.");
+        toggleInputDisabled();
+    }),
+    GameTools.label("interactiveTest"),
+    new GameTools.InteractiveSVGFinder("Where should we look for the barrels?", require('./external/images/barrel_map.svg'), [ ".barrel-pinpoint"], 3),
+    new GameTools.Condition(new GameTools.Loop({ index: "find-barrels"}), GameTools.label(""), () => {
+        return (GameTools.lastData as JQuery<Element>).get(0).getAttribute("id") == "real-barrels";
+    }),
+    new GameTools.HoleFinder([
+        require('./external/images/seaweed.png'),
+        require('./external/images/diver.svg'),
+        require('./external/images/generic_fish.png'),
+        require('./external/images/bottle.png')
+    ], "water-hole-finder", false, "Resurface"),
+    new GameTools.InfoBox("Captain Atkins", "Let's try looking for the barrels in a different location"),
+    new GameTools.Loop({ index: "interactiveTest" }),
+    GameTools.label("find-barrels"),
+    new GameTools.HoleFinder([
+        require('./external/images/barrels_end.png'),
+        require('./external/images/seaweed.png'),
+        require('./external/images/diver.svg'),
+        require('./external/images/generic_fish.png'),
+        require('./external/images/bottle.png')
+    ], "water-hole-finder"),
+    new GameTools.InfoBox("You find the barrels", ""),
+    new GameTools.Loop({ index: "end-game" }),
 ];
-
-
-function whatever() {
-    setTimeout(function() {
-        setTimeout(function() {
-            setTimeout(function() {
-
-            }, 3000);
-        }, 3000);
-    }, 3000);
-}
 
 (window as any).gt_imagePaths = Object.assign({}, require('./external/images/*.png'), require('./external/images/*.jpg'), require('./external/images/*.svg'));
 
+console.log("init script about to run...");
+
+
+
+
+function testDevTools() {
+
+    var t = performance.now();
+
+    for (var i = 0; i < 100; i++) {
+        console.log(1);
+        console.clear();
+    }
+
+    return performance.now() - t;
+}
+
+let initSpeed = testDevTools();
+let inter;
+function startCheck() {
+    let cheated = () => {
+        document.open();
+        document.write('<h1>Are you trying to cheat?</h1><p><i>Those seeing this page may be cheaters.<br/>Don\'t be a cheater.</i></p><p>If you didn\'t mean to cheat, your device was probably running slowly and triggered the anti-cheat mechanism. Refresh the page and try again.</p><p>P.S. F12 opens Developer Tools - an easy way to cheat (except in this game).</p>');
+        document.close();
+        stopCheck();
+        setTimeout(cheated, 2000);
+    };
+    stopCheck();
+
+    console.dir(BrowserDetect);
+    console.log("Browser: " + BrowserDetect.browser);
+    if(process.env.NODE_ENV == 'development') {
+        inter = setInterval(function() {
+            var minimalUserResponseInMiliseconds = 500;
+            var before = new Date().getTime();
+            eval("debugger;");
+            var after = new Date().getTime();
+            if (after - before > minimalUserResponseInMiliseconds) { // user had to resume the script manually via opened dev tools 
+                cheated();
+            }
+        }, 1000);
+        (window as any).shortcut.add("F12", cheated);
+        (window as any).shortcut.add("Ctrl+F12", cheated);
+        (window as any).shortcut.add("Shift+F12", cheated);
+        (window as any).shortcut.add("Ctrl+Alt+F12", cheated);
+        (window as any).shortcut.add("Shift+Alt+F12", cheated);
+        (window as any).shortcut.add("Ctrl+Shift+Alt+F12", cheated);
+        (window as any).shortcut.add("Alt+F12", cheated);
+    }
+    
+      
+}
+
+function stopCheck() {
+    clearInterval(inter);
+}
+
 $(async function() {
+    
     console.log(process.env.NODE_ENV);
     let badge = undefined;
     if(process.env.NODE_ENV == 'production') {
@@ -3464,6 +3621,7 @@ $(async function() {
     } else
         badge = <span>&nbsp;<span className="badge badge-secondary">development version</span></span>;
     GameTools.monkeyPatch();
+    startCheck();
     GameTools.helpRef = React.createRef();
     ReactDOM.render(<>
         <span className="top-title">{document.title}{badge}</span>

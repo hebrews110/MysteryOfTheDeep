@@ -89,8 +89,8 @@
         "velocity-animate": "^1.5.2"
     },
     "scripts": {
-        "watch": "parcel index.html -p 8080 --no-autoinstall",
-        "build": "parcel build index.html --no-autoinstall --detailed-report",
+        "watch": "parcel index.html -p 8080 --no-autoinstall --no-source-maps",
+        "build": "parcel build index.html --no-autoinstall --detailed-report --no-source-maps",
         "start": "npm run watch"
     },
     "devDependencies": {
