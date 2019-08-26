@@ -3586,11 +3586,12 @@ function startCheck() {
 
     console.dir(BrowserDetect);
     console.log("Browser: " + BrowserDetect.browser);
-    if(process.env.NODE_ENV == 'development') {
+    if(process.env.NODE_ENV == 'production') {
         inter = setInterval(function() {
             var minimalUserResponseInMiliseconds = 500;
             var before = new Date().getTime();
-            eval("debugger;");
+            const dbg = new Function("debugger;");
+            dbg();
             var after = new Date().getTime();
             if (after - before > minimalUserResponseInMiliseconds) { // user had to resume the script manually via opened dev tools 
                 cheated();
