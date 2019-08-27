@@ -91,7 +91,8 @@
     "scripts": {
         "watch": "parcel index.html -p 8080 --no-autoinstall --no-source-maps",
         "build": "parcel build index.html --no-autoinstall --detailed-report --no-source-maps",
-        "start": "npm run watch"
+        "start": "npm run watch",
+        "serve": "live-server --port=8080 dist"
     },
     "devDependencies": {
         "@babel/core": "^7.5.5",

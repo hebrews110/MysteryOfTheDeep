@@ -45,6 +45,11 @@ html {
 }
 
 #gametools-container {
+    .gt-help-body {
+        hr:last-child {
+            display: none;
+        }
+    }
     .clocks {
         padding: 0;
         width: auto;

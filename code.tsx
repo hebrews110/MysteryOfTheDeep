@@ -258,9 +258,9 @@ namespace GameTools {
             else
                 return "";
         }
-        public getHelp(): string {
+        public readonly getHelp: () => string = () => {
             return this.objectHelp() + this.contextualHelp();
-        }
+        };
         protected objectHelp(): string {
             return "";
         }
@@ -304,6 +304,8 @@ namespace GameTools {
                 this.objStyle.showCorrectConfirmation = true;
             if(this.objStyle.onTop == undefined)
                 this.objStyle.onTop = false;
+            if(this.objStyle.stripPunctuation == undefined)
+                this.objStyle.stripPunctuation = true;
             return this.objStyle;
         }
         
@@ -1392,6 +1394,7 @@ namespace GameTools {
         useAsContainer?: boolean;
         showCorrectConfirmation?: boolean;
         onTop?: boolean;
+        stripPunctuation?: boolean;
     }
     function colorBackground($element) {
         const backColor = HSLToHex(getRandomInt(0, 360), 100, 90);
@@ -1400,32 +1403,68 @@ namespace GameTools {
             "color": getContrastYIQ(backColor)
         });
     }
-    export class MultipleChoiceQuestion extends InfoBox {
+    export enum QuestionType {
+        MultipleChoice,
+        FillInTheBlank
+    }
+    export function stripPunctuation(str: string): string {
+        return str.replace(/[.,\/#!$'"%\^&\*;:{}=\-_`~()]/g,"").replace(/\s{2,}/g," ").toLowerCase();
+    }
+    export class Question extends InfoBox {
         readonly isQuestion: boolean;
-        constructor(question: GameValue<string>, protected choices: QuestionOption[], protected shouldReDisplay = true, style?: StylisticOptions, protected instructions: GameValue<string> = "") {
-            super(question, "", null, InfoBox.defaultDelay, style);
+        constructor(protected type: QuestionType, question: GameValue<string>, protected choices: QuestionOption[], protected shouldReDisplay = true, style?: StylisticOptions, protected instructions: GameValue<string> = "") {
+            super(question, "", Question.needsOKButton(type) ? "OK" : null, InfoBox.defaultDelay, style);
             this.isQuestion = choices.some((choice: QuestionOption) => {
                 return choice.correct;
             });
         }
+        public static needsOKButton(type: QuestionType): boolean {
+            return (type == QuestionType.FillInTheBlank);
+        }
         getDefaultStyle() {
             return { shouldShuffle: true };
+        }
+        buttonCallback(e: JQuery.ClickEvent) {
+            if(this.type == QuestionType.FillInTheBlank) {
+                $(e.target).prop("disabled", true);
+                this.answered(this.$dialog.find(".modal-body").find("input"));
+            }
+        }
+        isCorrect($button: JQuery<HTMLElement>, option: QuestionOption): boolean {
+            if(this.type == QuestionType.MultipleChoice)
+                return option.correct;
+            else if(this.type == QuestionType.FillInTheBlank) {
+                let text = $button.val() as string;
+                let answer = DisplayedItem.getValue(null, option.html);
+                if(this.objStyle.stripPunctuation) {
+                    text = stripPunctuation(text);
+                    answer = stripPunctuation(answer);
+                }
+                return text == answer;
+            } else {
+                throw new Error("Unsupported question type");
+            }
         }
         async answered($button: JQuery<HTMLElement>) {
             let option: QuestionOption = $button.data("questionOption");
             if(option.fn !== undefined)
                 await option.fn.call(option);
             GameTools.lastData = this.choices.indexOf(option);
-            if(!this.isQuestion || option.correct) {
+            if(!this.isQuestion || this.isCorrect($button, option)) {
                 GameTools.lastResult = true;
                 if(this.objStyle.showCorrectConfirmation) {
-                    $button.empty();
-                    $button.addClass("disable-hover");
                     this.$title.html(`That's right! The correct answer was ${option.html}.`);
-                    $button.append($("<i></i>").addClass("fas fa-check").css({
-                        "font-size": "150%",
-                        "color": "green"
-                    }));
+                    if(this.type == QuestionType.MultipleChoice) {
+                        $button.empty();
+                        $button.addClass("disable-hover");
+                        $button.append($("<i></i>").addClass("fas fa-check").css({
+                            "font-size": "150%",
+                            "color": "green"
+                        }));
+                    } else if(this.type == QuestionType.FillInTheBlank) {
+                        $button.prop("disabled", true);
+                    }
+                    
                     await sleep(3000);
                 }
                 this.displayNext();
@@ -1447,21 +1486,29 @@ namespace GameTools {
             var $body = this.$dialog.find(".modal-body");
             let $instructionsDiv = $("<div></div>").appendTo($body);
             DisplayedItem.getValue(this, this.instructions, $instructionsDiv.get(0));
-            var $finderButtons = $("<div></div>").addClass("finder-buttons").appendTo($body);
-            console.log("Button finder created");
-            shuffle(this.choices, this.objStyle.shouldShuffle).forEach((element, index) => {
-                var $button = $("<button></button>");
-                DisplayedItem.getValue(this, element.html, $button.get(0));
-                if(this.objStyle.shouldColorBackgrounds)
-                    colorBackground($button);
-                $button.data("index", index);
-                $button.data("questionOption", element);
-                $button.click(async (e) => {
-                    $finderButtons.children("button").prop("disabled", true);
-                    await this.answered($button);
+            if(this.type == QuestionType.MultipleChoice) {
+                var $finderButtons = $("<div></div>").addClass("finder-buttons").appendTo($body);
+                console.log("Button finder created");
+                shuffle(this.choices, this.objStyle.shouldShuffle).forEach((element) => {
+                    var $button = $("<button></button>");
+                    DisplayedItem.getValue(this, element.html, $button.get(0));
+                    if(this.objStyle.shouldColorBackgrounds)
+                        colorBackground($button);
+                    $button.data("index", this.choices.indexOf(element));
+                    $button.data("questionOption", element);
+                    $button.click(async (e) => {
+                        $finderButtons.children("button").prop("disabled", true);
+                        await this.answered($button);
+                    });
+                    $finderButtons.append($button);
                 });
-                $finderButtons.append($button);
-            });
+            } else if(this.type == QuestionType.FillInTheBlank) {
+                $body.append($("<input/>").addClass("form-control").attr("type", "text").data("index", 0).data("questionOption", this.choices[0]));
+                $body.append($("<small></small>").addClass("form-text text-muted").text("On a small screen? Consider solving the question on a piece of paper and then typing it in at the end."));
+            } else {
+                throw new Error("Unexpected question type");
+            }
+            
         }
     }
     export function isElement(obj: Node): boolean {
@@ -2028,13 +2075,16 @@ namespace GameTools {
             toggleInputDisabled();
             if(!notDone) {
                 this.showCloseButton();
-                if(this.endDialogueWhenMessageFinishes) {
+                if(this.allMessages.length == this.asked.size || this.endDialogueWhenMessageFinishes) {
                     toggleInputDisabled();
                     DialogueExperience.doReenableInput = true;
                 }
             }
             
             
+        }
+        objectHelp(): string {
+            return super.objectHelp() + "Chat with one of the characters in the game!<p></p>If you can't choose a message, the conversation may have ended (check for a close button in the top right of the chat widget).<hr/>";
         }
         constructor(protected riveFile: string, title?: string, avatar?: string, protected allowedMessages?: string[],
             protected messageFeeder?: (controller: DialogueExperience) => void, protected userFuncs: UserFunctionTable = {}) {
@@ -2054,7 +2104,7 @@ namespace GameTools {
                                       titleAvatar={avatar}
                                       profileAvatar={avatar}
                                       onCloseClick={this.endDialogue.bind(this)}
-                                      subtitle={<MomentWrapper ref={this.momentRef} filter={dateFilter} fromNow date={this.lastSeenTime}/>}
+                                      subtitle={""} /* <MomentWrapper ref={this.momentRef} filter={dateFilter} fromNow date={this.lastSeenTime}/> */
                                       possibleMessages={this.allMessages}
                                       inputType={allowedMessages == undefined ? "text" : "dropdown"}
                                       handleNewUserMessage={this.handleNewUserMessage.bind(this)}/>;
@@ -2128,8 +2178,10 @@ namespace GameTools {
             const items = (this.state.visible) ?
                 <GameTools.ControlButton onClick={() => {
                     const topItem = visibleStack[visibleStack.length - 1] as ContextualHelpItem;
-                    setTimeout(() => {
-                        new InfoBox("Information", topItem.getHelp(), "OK", 0).display();
+                    setTimeout(async() => {
+                        let box = new InfoBox("Information", topItem.getHelp(), "OK", 0);
+                        await box.display();
+                        box.$content.addClass("gt-help-body");
                     }, 0);
                 }} {...rest}/>
             : null;
@@ -2168,6 +2220,9 @@ namespace GameTools {
             this.shouldContinue = false;
             this.stopAnimation();
             await super._undisplay();
+        }
+        objectHelp(): string {
+            return super.objectHelp() + "You are looking for a certain object. When you see it, click to take a picture of it!<p></p>If you choose the wrong object or your picture isn't clear enough, you'll be prompted to take another one.<hr/>";
         }
         async animateNextImage() {
             await sleep(2000);
@@ -2297,7 +2352,8 @@ namespace GameTools {
                 "background-color": "transparent",
                 "border": "none",
                 "justify-content": "center",
-                "align-items": "center"
+                "align-items": "center",
+                "box-shadow": "none"
             });
             let holeFinderContainer;
             this.modal_content.append(holeFinderContainer = $("<div></div>").addClass("hole-finder-container"));
@@ -2320,7 +2376,7 @@ namespace GameTools {
             this.observer = new IntersectionObserver((entries) => {
                 if(entries.length > 1)
                     console.error("Not expecting multiple entries (" + entries.length + ")");
-                this.currentRatio = entries[0].intersectionRatio;
+                this.currentRatio = entries[entries.length - 1].intersectionRatio;
             }, options);
             window.requestAnimationFrame(() => {
                 this.shouldContinue = true;
@@ -2342,7 +2398,7 @@ namespace GameTools {
                     } else
                         errorMessage = "That isn't what we're looking for. Try again.";
                 } else
-                    errorMessage = "It doesn't look like there was much to see there. Try again.";
+                    errorMessage = "It doesn't look like this picture will be useful.<p></p>Remember that the whole object needs to be within the lens.<p></p>Try again.";
                 if(foundItem) {
                     this.displayNext();
                     return;
@@ -3044,9 +3100,8 @@ let day3_question = (isQuestion: boolean) => {
 
 let myArray = [
     new GameTools.Invoke(() => GameTools.warnUser()),
-    new GameTools.Loop({ index: "interactiveTest"}),
     GameTools.label("chapter_selection"),
-    new GameTools.MultipleChoiceQuestion("Choose a chapter.", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Choose a chapter.", [
         { html: "Chapter 1" },
         { html: "Chapter 2" },
         { html: "Chapter 3" },
@@ -3105,7 +3160,15 @@ let myArray = [
         ]) },
         { caseValue: 1, handler: () => GameTools.startDisplay([
             new GameTools.SetBackground(require('./external/images/secure_building.svg')),
-            new GameTools.InfoBox("Sign", "A sign outside a heavily secured and guarded building says that visitors are unwelcome today."),
+            new GameTools.InfoBox("Sign", "A sign outside a heavily secured and guarded building says that visitors are unwelcome today. But you spot something else..."),
+            new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day1_notebookitems, GameTools.noteBookItem("Creature card", () => new CreatureCard(`${getEquivalentCodeLetter('A')} ${getEquivalentCodeLetter('B')}`, require('./external/images/stingray.jpg'), "Southern stingray", "Dasyatis americana", <p>
+                The stingrays are a large suborder of the rays. They are cartilaginous fishes related to sharks.
+                <br/>
+                Most stingrays have one or more barbed stings on the tail, which is used only for self defending.
+                The sting may reach about 35 cm, and its underside has two grooves with venom glands.
+                The sting is covered with a thin layer of skin, the sheath, in which the venom is held.
+                A few members of the suborder, such as the manta rays and the porcupine ray, do not have stings.
+            </p>)))),
             () => new GameTools.Branch({ index: "day1_busstop"}).setParentArray(myArray)
         ]) },
         { caseValue: 2, handler: () => new GameTools.Branch({ index: "day1_porpis" }).setParentArray(myArray).display() },
@@ -3165,7 +3228,7 @@ let myArray = [
     }),
     GameTools.label('found_whale'),
     new GameTools.SetBackground(require('./external/images/office.svg')),
-    new GameTools.MultipleChoiceQuestion("Which of these whale pods has the highest level of contamination?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Which of these whale pods has the highest level of contamination?", [
         { html: "Pod A" },
         { html: "Pod B", correct: true },
         { html: "Pod C" }
@@ -3180,7 +3243,7 @@ let myArray = [
         GameTools.DialogueExperience.doReenableInput = true;
         controller.showCloseButton();
     }),
-    new GameTools.MultipleChoiceQuestion("What do resident killer whales eat?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "What do resident killer whales eat?", [
         { html: "Seals" },
         { html: "Salmon", correct: true },
         { html: "Plankton" }
@@ -3287,42 +3350,42 @@ let myArray = [
         <p>If you are confused, check your field guide for information.</p>
     </>),
     GameTools.label("day2_wisequiz"),
-    new GameTools.MultipleChoiceQuestion("Oncorhynchus means...", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Oncorhynchus means...", [
         { html: "hook-nose", correct: true },
         { html: "color-changing" },
         { html: "needs to perform again" }
     ], true),
-    new GameTools.MultipleChoiceQuestion("Most salmon have an anadromous lifestyle, meaning...", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Most salmon have an anadromous lifestyle, meaning...", [
         { html: "They live in freshwater and saltwater, but breed in saltwater", correct: true },
         { html: "They mate with fish they've never seen before" },
         { html: "They live in freshwater and saltwater, but breed in freshwater" }
     ], true),
-    new GameTools.MultipleChoiceQuestion("What is an alevin?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "What is an alevin?", [
         { html: "A small chipmunk with a squeaky voice" },
         { html: "A tiny salmon right after it hatches", correct: true },
         { html: "A nest of salmon eggs" }
     ]),
-    new GameTools.MultipleChoiceQuestion("The early freshwater phase of the coho salmon can be as long as...", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "The early freshwater phase of the coho salmon can be as long as...", [
         { html: "Three weeks" },
         { html: "TWo years", correct: true },
         { html: "The time it takes to eat one of Tall Teddy's Tasty Treats" }
     ]),
-    new GameTools.MultipleChoiceQuestion("Parr marks help salmon...", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Parr marks help salmon...", [
         { html: "Blend in with the gravel", correct: true },
         { html: "Play golf", },
         { html: "Attract mates" }
     ]),
-    new GameTools.MultipleChoiceQuestion("Chinook salmon can jump as high as..", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Chinook salmon can jump as high as..", [
         { html: "Three meters", correct: true },
         { html: "One meter", },
         { html: "The height of Niagara Falls" }
     ]),
-    new GameTools.MultipleChoiceQuestion("How many eggs can a sockeye salmon lay?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "How many eggs can a sockeye salmon lay?", [
         { html: "4000", correct: true },
         { html: "40", },
         { html: "400" }
     ]),
-    new GameTools.MultipleChoiceQuestion("Chum salmon are also known as...", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Chum salmon are also known as...", [
         { html: "Dog salmon", correct: true },
         { html: "Friendly salmon", },
         { html: "Kettle salmon" }
@@ -3357,7 +3420,7 @@ let myArray = [
     GameTools.label("day2_mapimage"),
     new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Salmon map",
         () => new GameTools.InfoBox("Salmon map", <GameTools.ZoomableSVG style={{padding: "1em"}} src={require('./external/images/map.svg')} visibleLayers={[ "Basemap", "Layer 2"]}/>)))),
-    new GameTools.MultipleChoiceQuestion("What are salmon likely to be eating?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "What are salmon likely to be eating?", [
         { html: "Herring", correct: true},
         { html: "Clams" },
         { html: "Plankton" }
@@ -3372,22 +3435,22 @@ let myArray = [
         GameTools.DialogueExperience.doReenableInput = true;
         controller.showCloseButton();
     }),
-    new GameTools.MultipleChoiceQuestion("The term 'plankton' is Greek for:", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "The term 'plankton' is Greek for:", [
         { html: "wanderer", correct: true},
         { html: "tiny" },
         { html: "1 ton of wooden boards" }
     ], true),
-    new GameTools.MultipleChoiceQuestion("Which of the following is considered plankton?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Which of the following is considered plankton?", [
         { html: "herring" },
         { html: "jellyfish", correct: true },
         { html: "kelp" }
     ], true),
-    new GameTools.MultipleChoiceQuestion("What percentage of the world's oxygen is produced by phytoplankton?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "What percentage of the world's oxygen is produced by phytoplankton?", [
         { html: "30-50%" },
         { html: "70-90%", correct: true },
         { html: "50-70%" }
     ], true),
-    new GameTools.MultipleChoiceQuestion("Which of these is made of the remains of a plankton?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Which of these is made of the remains of a plankton?", [
         { html: "sand" },
         { html: "chalk", correct: true },
         { html: "glue" }
@@ -3419,7 +3482,6 @@ let myArray = [
     new GameTools.Invoke(() => notebookList = new Set()),
     new GameTools.AddToNotebook(() => notebookList, day1_notebookitems),
     new GameTools.AddToNotebook(() => notebookList, day2_notebookitems),
-    new GameTools.Invoke(() => console.log(notebookList)),
     day3Newspaper,
     new GameTools.DialogueExperience(require('./external/tasman.rive'), "Dr. MacDonald", null, [
 
@@ -3449,11 +3511,11 @@ let myArray = [
         GameTools.DialogueExperience.doReenableInput = true;
         controller.showCloseButton();
     }),
-    new GameTools.MultipleChoiceQuestion("At 10:00 AM, was the water mostly freshwater or mostly saltwater?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "At 10:00 AM, was the water mostly freshwater or mostly saltwater?", [
         { html: "Freshwater", correct: true },
         { html: "Saltwater", }
     ], true, undefined, day3_question(true)),
-    new GameTools.MultipleChoiceQuestion("Is the toxicity of the water higher when the salinity is higher?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Is the toxicity of the water higher when the salinity is higher?", [
         { html: "No" },
         { html: "Yes", correct: true }
     ], true, { showCorrectConfirmation: false }, day3_question(true)),
@@ -3464,7 +3526,7 @@ let myArray = [
         GameTools.DialogueExperience.doReenableInput = true;
         controller.showCloseButton();
     }),
-    new GameTools.MultipleChoiceQuestion("Dr. MacDonald: It's 7 AM now. What time will the next low tide be?", [
+    new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Dr. MacDonald: It's 7 AM now. What time will the next low tide be?", [
         { html: "3-4 hours", correct: true },
         { html: "6-7 hours" },
         { html: "11 hours"}
@@ -3504,6 +3566,10 @@ let myArray = [
     new GameTools.Loop({ index: "chapter_selection" }),
     // ------- Chapter 4 -----------
     GameTools.label("chapter4"),
+    new GameTools.Invoke(() => notebookList = new Set()),
+    new GameTools.AddToNotebook(() => notebookList, day1_notebookitems),
+    new GameTools.AddToNotebook(() => notebookList, day2_notebookitems),
+    new GameTools.AddToNotebook(() => notebookList, day3_notebookitems),
     new GameTools.SetBackground(require('./external/images/office.svg')),
     day4Newspaper,
     new GameTools.DialogueExperience(null, "Anna Atlantic", null, [
@@ -3549,8 +3615,51 @@ let myArray = [
         require('./external/images/generic_fish.png'),
         require('./external/images/bottle.png')
     ], "water-hole-finder"),
-    new GameTools.InfoBox("You find the barrels", ""),
     new GameTools.Loop({ index: "end-game" }),
+    GameTools.label("end-game"),
+    new GameTools.SetBackground(require('./external/images/airport.jpg')),
+    new GameTools.Delay(3000),
+    new GameTools.SetBackground(require('./external/images/office.svg')),
+    new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="Routine Rambler" articles={[
+        {
+            headline: "Source of Contaminent Located in Whale Case!",
+            content: <>
+                Captain Atkins announced today that thanks to the combined efforts of her crew, PORPIS,
+                Anna Atlantic and her assistant, and other associated agencies, the source of the contaminant
+                was located.
+                <p></p>
+                <blockquote>
+                    We are pleased to announce that we have discovered why the whales were contaminated. Several
+                    toxic barrels were dumped into the ocean by an unknown unscrupulous individual.
+                </blockquote>
+                Captain Atkins was unable to immediately confirm the person's identity, but assured
+                <i> Routine Rambler</i> reporters that the person would be behind bars "within weeks".
+                <p></p>
+                Martin Mersenich was unable to be reached for comment. We have received numerous (unconfirmed) tips that he left
+                the country today due to a sudden commitment elsewhere.
+            </>
+        }
+    ]}/>),
+    new GameTools.DialogueExperience(null, "Anna Atlantic", null, [], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("Hey Ace!\nGreat work on putting together all of these clues!\nRemember that code I sent you?\nI think you have enough Creature Cards to be able to figure it out!\nEven if you don't have all the letters, look for a pattern.\nThe entire code is based off one simple rule.\nStill confused? Remember that the cards show you how to hide your message.\nIf you want to find the message, you have to do something backwards.");
+        GameTools.DialogueExperience.doReenableInput = true;
+        controller.showCloseButton();
+    }),
+    GameTools.label('solveCode'),
+    new GameTools.Question(GameTools.QuestionType.FillInTheBlank, "What do you think the code is?", [ { html: realCode, correct: true }], true, undefined, `<p><b>${codedCode}</b></p>`),
+    new GameTools.DialogueExperience(require('./external/atlantic.rive'), "Anna Atlantic", null, [
+        "Martin Mersenich is the one who dumped those barrels there!",
+        "So, are we finished?"
+    ], async(controller) => {
+        toggleInputDisabled();
+        await controller.sendMessage("So, did you solve it?");
+        toggleInputDisabled();
+    }),
+    new GameTools.SetBackground(require('./components/fireworks.jpg')),
+    new GameTools.Delay(3000),
+    new GameTools.InfoBox("Congratulations!", "You've solved the mystery!"),
+    new GameTools.Loop({ index: "chapter_selection"}),
 ];
 
 (window as any).gt_imagePaths = Object.assign({}, require('./external/images/*.png'), require('./external/images/*.jpg'), require('./external/images/*.svg'));
@@ -3577,7 +3686,7 @@ let inter;
 function startCheck() {
     let cheated = () => {
         document.open();
-        document.write('<h1>Are you trying to cheat?</h1><p><i>Those seeing this page may be cheaters.<br/>Don\'t be a cheater.</i></p><p>If you didn\'t mean to cheat, your device was probably running slowly and triggered the anti-cheat mechanism. Refresh the page and try again.</p><p>P.S. F12 opens Developer Tools - an easy way to cheat (except in this game).</p>');
+        document.write('<h1>Are you trying to cheat?</h1><p><i>Those seeing this page may be cheaters.<br/>Don\'t be a cheater.</i></p><p>If you didn\'t mean to cheat, your device was probably running slowly and triggered the anti-cheat mechanism. Refresh the page and try again.</p><p>P.S. F12, Ctrl+U, and Ctrl+Shift+I are all ways to open Developer Tools - an easy way to cheat (except in this game).</p>');
         document.close();
         stopCheck();
         setTimeout(cheated, 2000);
@@ -3604,6 +3713,8 @@ function startCheck() {
         (window as any).shortcut.add("Shift+Alt+F12", cheated);
         (window as any).shortcut.add("Ctrl+Shift+Alt+F12", cheated);
         (window as any).shortcut.add("Alt+F12", cheated);
+        (window as any).shortcut.add("Ctrl+U", cheated);
+        (window as any).shortcut.add("Ctrl+Shift+I", cheated);
     }
     
       
