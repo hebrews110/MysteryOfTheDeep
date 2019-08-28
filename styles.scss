@@ -54,15 +54,16 @@ html {
         padding: 0;
         width: auto;
         font-size: 1rem;
+        $dim: 17em;
         &.single {
             padding: 0;
             border-radius: 50%;
-            height: 20em;
-            width: 20em;
+            height: $dim;
+            width: $dim;
             display: inline-block;
             .clock {
-                height: 20em;
-                width: 20em;
+                height: $dim;
+                width: $dim;
                 padding: 0;
                 margin: 0;
             }
@@ -857,7 +858,6 @@ html {
     .interactive-svg {
         svg {
             max-width: 100%;
-            height: auto;
             width: 100%;
             .interactive-component {
                 cursor: pointer;
@@ -1183,10 +1183,9 @@ button.modal-pinned-corner-close {
     }
 }
 
-.rcw-conversation-container {
-    .rcw-header {
-        border-radius: 10px 10px 0 0;
-        padding: 15px 0 25px;
+.rcw-sender {
+    .dropdown-item {
+        white-space: normal;
     }
 }
 
@@ -1418,22 +1417,31 @@ div.jumping-dots {
                 );
             }
         }
-        .control-button {
-            @extend .shadow;
-            border-radius: 50%;
-            width: 4rem;
-            height: 4rem;
-            font-size: 2.5rem;
-            margin: 0 0.5rem;
-            padding: 0;
-            background-clip: padding-box;
-            display: inline-flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-        }
     }
 }
+
+#gametools-wrapper {
+    .control-button {
+        @extend .shadow;
+        border-radius: 50%;
+        width: 4rem;
+        height: 4rem;
+        font-size: 2.5rem;
+        margin: 0 0.5rem;
+        padding: 0;
+        background-clip: padding-box;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+    }
+}
+
+.bs-enabled {
+    opacity: 1 !important;
+    pointer-events: none;
+}
+
 
 #gametools-container:not(.gt-ditem-visible) .control-button {
     @extend .disabled;
@@ -1483,28 +1491,30 @@ div.jumping-dots {
 .gt-infopage-modal-content {
     max-height: calc(100vh - 8.5rem);
 }
+
+.gt-ts-footer {
+    justify-content: center;
+    .btn {
+        font-size: 2rem;
+        font-weight: 300;
+        line-height: 1.1;
+    }
+}
 .gt-infopage {
-    $nav-height: 4em;
-    padding-top: $nav-height + 0.5em;
     min-height: 0;
     display: flex;
     flex-direction: column;
     text-align: left;
+    padding: 0;
     .gt-infopage-navbar {
-        position: absolute;
-        top: 0;
-        left: 0;
-        padding-bottom: 1px;
-        $horz-padding: 0.1rem;
-        padding-left: $horz-padding;
-        padding-right: $horz-padding;
         flex: 0 0 auto;
-        height: $nav-height;
+        padding: 0;
     }
     .info-page-info {
         overflow: auto;
         flex: 1 1 auto;
         min-height: 0;
+        padding: $modal-inner-padding;
     }
 }
 
@@ -1652,6 +1662,17 @@ div.jumping-dots {
 
     .business-card-no-space {
         letter-spacing: 0px;
+    }
+}
+
+body.this-is-ie {
+    #gametools-container {
+        .interactive-svg {
+            svg {
+                height: 70vmin;
+                width: 70vmin;
+            }
+        }
     }
 }
 

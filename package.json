@@ -99,11 +99,15 @@
         "@babel/preset-env": "^7.5.5",
         "@babel/preset-react": "^7.0.0",
         "@interactjs/types": "^1.5.4",
+        "@types/jsdom": "^12.2.4",
         "@types/webpack-env": "^1.14.0",
         "babel-preset-env": "^1.7.0",
         "core-js-compat": "^3.2.1",
         "cssnano": "^4.1.10",
         "postcss-modules": "^1.4.1",
-        "sass": "^1.22.9"
+        "request": "^2.88.0",
+        "request-promise-native": "^1.0.7",
+        "sass": "^1.22.9",
+        "xml2js": "^0.4.19"
     }
 }

@@ -78,7 +78,7 @@ namespace GameTools {
     export let helpRef: React.RefObject<any>;
     let helpShown: boolean;
     let visibleStack: DisplayedItem[];
-    export const SPEED_HACK: boolean = true;
+    export const SPEED_HACK: boolean = process.env.NODE_ENV == 'development';
     (function($) {
         $.fn.randomize = function(childElem) {
             function shuffle(o) {
@@ -1588,6 +1588,7 @@ namespace GameTools {
     }
     export async function warnUser() {
         if(BrowserDetect.browser === 'Explorer') {
+            $(document.body).addClass("this-is-ie");
             let box = new InfoBox("Attention!", "<p>This game is not heavily tested on Internet Explorer and may contain bugs/visual issues.</p>" +
                 "<p>Please use a browser such as Pale Moon, Mozilla Firefox, or Google Chrome.</p>", "Continue anyways", 0);
             return new Promise((resolve) => {
@@ -1707,8 +1708,8 @@ namespace GameTools {
         }
     }
     export function label(label: GameValue<string>): Label;
-    export function label<T extends GameArrayItem>(label: GameValue<string>, item?: T): LabelledItem&T;
-    export function label<T extends GameArrayItem>(label: GameValue<string> = "", item?: T): LabelledItem&T {
+    export function label<T extends GameArrayItem = Label>(label: GameValue<string>, item?: T): LabelledItem&T;
+    export function label<T extends GameArrayItem = Label>(label: GameValue<string> = "", item?: T): LabelledItem&T {
         if(item !== undefined) {
             let li = (item as unknown as LabelledItem);
             li.gt_label = DisplayedItem.getValue(this, label);
@@ -1867,7 +1868,7 @@ namespace GameTools {
             return page;
         }
         getPageInfo(routeProps) {
-            return { __html: DisplayedItem.getValue(null, this.getPageFromSlug(routeProps.match.params.id).info)};
+            return <ReactGameValue val={this.getPageFromSlug(routeProps.match.params.id).info}/>;
         }
         componentDidMount() {
             let body = $(this.navRef.current).parent();
@@ -1882,11 +1883,11 @@ namespace GameTools {
             });
             this.navRef = React.createRef();
             return <Router>
-                <nav ref={this.navRef} className="gt-infopage-navbar navbar navbar-expand-sm w-100 align-items-end">
-                    <ListComponent array={pageLinks} listType="ul" className="navbar-nav nav-fill w-100 nav-tabs d-flex flex-row justify-content-center align-items-center align-content-center" itemClassName="nav-item" />
+                <nav ref={this.navRef} className="gt-infopage-navbar navbar navbar-expand-sm w-100 overflow-auto align-items-end">
+                    <ListComponent array={pageLinks} listType="ul" className="navbar-nav nav-fill w-100 nav-tabs d-flex flex-row align-items-end align-content-end" itemClassName="nav-item" />
                 </nav>
                 <div className="info-page-info">
-                    <Route path="/:id" render={routeProps => <span dangerouslySetInnerHTML={this.getPageInfo(routeProps)}></span>}/>
+                    <Route path="/:id" render={routeProps => this.getPageInfo(routeProps)}/>
                 </div>
             </Router>;
         }
@@ -2061,7 +2062,8 @@ namespace GameTools {
             await sleep(1000);
             console.log("Message converted to: " + newMessage);
             this.lastSeenTime = new Date();
-            this.momentRef.current.setState({ date: this.lastSeenTime});
+            if(this.momentRef.current != null && this.momentRef.current != undefined)
+                this.momentRef.current.setState({ date: this.lastSeenTime});
             let reply = await this.bot.reply("local-user", newMessage, this);
             // Now send the message throught the backend API
             await this.sendMessage(reply);
@@ -2179,9 +2181,13 @@ namespace GameTools {
                 <GameTools.ControlButton onClick={() => {
                     const topItem = visibleStack[visibleStack.length - 1] as ContextualHelpItem;
                     setTimeout(async() => {
-                        let box = new InfoBox("Information", topItem.getHelp(), "OK", 0);
+                        let box = new class extends InfoBox {
+                            async dialogCreated() {
+                                await super.dialogCreated();
+                                this.$content.addClass("gt-help-body");
+                            }
+                        }("Information", topItem.getHelp(), "OK", 0);
                         await box.display();
-                        box.$content.addClass("gt-help-body");
                     }, 0);
                 }} {...rest}/>
             : null;
@@ -2199,6 +2205,7 @@ namespace GameTools {
         shouldContinue: boolean;
         allowClicks: boolean;
         holeFinder: JQuery<HTMLElement>;
+        startTime: number;
         constructor(protected randomImages: string[], protected customClasses = "", protected hasCorrect = true, protected somethingElseString = "Try something else") {
             super(null, null, null);
         }
@@ -2248,7 +2255,8 @@ namespace GameTools {
             };
             
             $image.addClass("hole-finder-animate");
-
+            this.startTime = Date.now();
+            console.log("start " + this.startTime);
             setTimeout(completeCallback, 1000);
             
             this.newIndex();
@@ -2391,7 +2399,8 @@ namespace GameTools {
                 this.allowClicks = false;
                 let foundItem = false;
                 let errorMessage = "";
-                if(this.currentRatio >= 0.5) {
+                const diff = (Date.now()-this.startTime);
+                if(diff >= 350 && diff <= 850) {
                     let index = parseInt(this.currentImage.getAttribute("data-index"));
                     if(this.hasCorrect && index == 0) {
                         foundItem = true;
@@ -2453,7 +2462,7 @@ namespace GameTools {
     export class SetBackground extends DisplayedItem {
         static nextIndex = 0;
         public static readonly duration = 2000;
-        constructor(protected newsrc: GameValue<string>) {
+        constructor(protected newsrc: GameValue<string>, protected customClasses: GameValue<string> = "") {
             super();
         }
         getImg(): JQuery<HTMLElement> {
@@ -2461,6 +2470,10 @@ namespace GameTools {
         }
         async reset() {
             await super.reset();
+        }
+        hideImage($img: JQuery<HTMLElement>) {
+            $img.removeClass("show");
+            $img.removeClass($img.attr("data-customClasses"));
         }
         async display() {
             await super.display();
@@ -2472,19 +2485,22 @@ namespace GameTools {
                 let bgImg = new Image();
                 bgImg.onload = () => {
                     $("#gametools-container").addClass("bkgd-shown");
-                    $($img.get(SetBackground.nextIndex ^ 1)).removeClass("show");
+                    this.hideImage($($img.get(SetBackground.nextIndex ^ 1)));
                     window.requestAnimationFrame(() => {
                         $($img.get(SetBackground.nextIndex)).addClass("show");
                         SetBackground.nextIndex ^= 1;
                         this.displayNext();
                     });
                     $($img.get(SetBackground.nextIndex)).css("background-image", 'url(' + bgImg.src + ')');
+                    const cc = DisplayedItem.getValue(null, this.customClasses);
+                    $img.attr("data-customClasses", cc);
+                    $img.addClass(cc);
                 };
                 bgImg.src = DisplayedItem.getValue(this, this.newsrc);
             } else {
                 $("#gametools-container").removeClass("bkgd-shown");
                 $($img.get(SetBackground.nextIndex ^ 1)).css("background-image", "none");
-                $($img.get(SetBackground.nextIndex ^ 1)).removeClass("show");
+                this.hideImage($($img.get(SetBackground.nextIndex ^ 1)));
                 this.displayNext();
             }
         }
@@ -2787,6 +2803,37 @@ namespace GameTools {
             </div>;
         }
     }
+    export class TagStripperFragment extends React.Component<{ strippedTags: string[]; }> {
+        domRef: React.RefObject<HTMLDivElement>;
+        constructor(props) {
+            super(props);
+        }
+        componentDidMount() {
+            let div = this.domRef.current;
+            this.props.strippedTags.forEach((tag) => {
+                let items = div.querySelectorAll(tag);
+                items.forEach((item) => {
+                    item.replaceWith(...Array.from(item.childNodes));
+                });
+            });
+        }
+        render() {
+            this.domRef = React.createRef();
+            return <div ref={this.domRef}>{this.props.children}</div>;
+        }
+    }
+    export class TitleScreen extends InfoBox {
+        constructor() {
+            super(null, "Test", "Start", 0);
+        }
+        async dialogCreated() {
+            await super.dialogCreated();
+            this.$content.html(`<h1 class="display-4">Welcome to ${document.title}!</h1>`);
+            this.$content.append($("<h3 class='d-inline-block'></h3>").append($("<small></small>").addClass("text-muted").html("Need help during the game? Use this button when it appears:")));
+            this.$content.append("<button disabled='disabled' class='control-button btn btn-info bs-enabled'><i class='fas fa-question'></i></button>");
+            this.$footer.addClass("gt-ts-footer");
+        }
+    }
 }
 
 class CreatureCard extends GameTools.InfoBox {
@@ -2824,12 +2871,62 @@ async function showNotebook(this: GameTools.ControlButton) {
 }
 
 let infoGuide: GameTools.InfoPageItem[] = [
-    { name: "Test page 1", info: "<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1<p></p>Info 1"},
-    { name: "Test page 2", info: "Info 2"},
-    { name: "Test page 3", info: "Info 3"},
-    { name: "Test page 4", info: "Info 4"},
-    { name: "Test page 5", info: "Info 5"},
-    { name: "Test page 6", info: "Info 6"}
+    { name: "Food web", info: <GameTools.TagStripperFragment strippedTags={[ "a" ]}>
+        <p>A <b>food web</b> is similar to a <a href="https://simple.wikipedia.org/wiki/Food_chain" title="Food chain">food chain</a> but larger. It's a <a href="https://simple.wikipedia.org/wiki/Diagram" title="Diagram">diagram</a> that combines many food chains into one picture. The diagram uses arrows to show the energy relationships among organisms. Food webs show how <a href="https://simple.wikipedia.org/wiki/Plant" title="Plant">plants</a> and <a href="https://simple.wikipedia.org/wiki/Animal" title="Animal">animals</a> are connected in many ways. The arrow points from the organism being eaten to the organism that eats it. </p>
+
+        <p>A <b>food web</b> (or <b>food cycle</b>) is a natural interconnection of <a href="https://simple.wikipedia.org/wiki/Food_chain" title="Food chain">food chains</a>. The two extreme categories (<a href="https://simple.wikipedia.org/w/index.php?title=Trophic_level&amp;action=edit&amp;redlink=1" title="Trophic level (not yet started)">trophic levels</a>) are: </p>
+
+        <ol><li>the <a href="https://simple.wikipedia.org/wiki/Autotroph" title="Autotroph">autotrophs</a> (organisms that make their own food), and</li>
+        <li>the <a href="https://simple.wikipedia.org/wiki/Heterotroph" title="Heterotroph">heterotrophs</a> (organisms that need other organisms for food).</li>
+        </ol><p>A gradient exists: there are different kinds of feeding relations: <a href="https://simple.wikipedia.org/wiki/Herbivore" title="Herbivore">herbivory</a>, <a href="https://simple.wikipedia.org/wiki/Carnivore" title="Carnivore">carnivory</a>, <a href="https://simple.wikipedia.org/wiki/Scavenger" title="Scavenger">scavenging</a> and <a href="https://simple.wikipedia.org/wiki/Parasitism" title="Parasitism">parasitism</a>. </p>
+
+        <p>Some of the organic matter eaten by heterotrophs, such as <a href="https://simple.wikipedia.org/wiki/Sugar" title="Sugar">sugars</a>, provides energy. Autotrophs and heterotrophs come in all sizes, from <a href="https://simple.wikipedia.org/wiki/Microscopic" title="Microscopic">microscopic</a> to many <a href="https://simple.wikipedia.org/wiki/Tonne" title="Tonne">tonnes</a> – from <a href="https://simple.wikipedia.org/wiki/Cyanobacteria" title="Cyanobacteria">cyanobacteria</a> to giant <a href="https://simple.wikipedia.org/wiki/Redwood" title="Redwood">redwoods</a>, and from <a href="https://simple.wikipedia.org/wiki/Virus" title="Virus">viruses</a> to <a href="https://simple.wikipedia.org/wiki/Blue_whale" title="Blue whale">blue whales</a>. </p>
+
+
+    </GameTools.TagStripperFragment>},
+    { name: "Bioaccumulation", info: <p><b>Bioaccumulation</b> is a process in which toxic substances (such as pesticides) accumulate in living organisms. This poses a threat to health, life, and the environment.</p>},
+    { name: "Killer whale", info: <>
+        <p>
+        The killer whale or orca (Orcinus orca) is a toothed whale belonging to the oceanic dolphin family, of which it is the largest member.
+        Killer whales have a diverse diet, although individual populations often specialize in particular types of prey.
+        Some feed exclusively on fish, while others hunt marine mammals such as seals and other species of dolphin.
+        They have been known to attack baleen whale calves, and even adult whales.
+        Killer whales are apex predators, as no animal preys on them. A cosmopolitan species, they can be found in each of the world's oceans in a variety of marine environments.
+        </p>
+        <p>
+        There are three general types of killer whales:
+        <ol>
+            <li><b>Resident</b>: These are the most commonly sighted of the three populations in the coastal waters of the northeast Pacific.
+                Residents' diets consist primarily of fish and sometimes squid, and they live in complex and cohesive family groups called pods.</li>
+            <li><b>Transient</b>: The diets of these whales consist almost exclusively of marine mammals.Transients generally travel in small groups, usually of two to six animals,
+                and have less persistent family bonds than residents. Transients vocalize in less variable and less complex dialects</li>
+            <li><b>Offshore</b>: A third population of killer whales in the northeast Pacific was discovered in 1988, when a humpback whale researcher observed them in open water.
+                As their name suggests, they travel far from shore and feed primarily on schooling fish.
+                However, because they have large, scarred and nicked dorsal fins resembling those of mammal-hunting transients,
+                it may be that they also eat mammals and sharks.</li>
+        </ol>
+        </p>
+    </>},
+    { name: "Salmon", info: <>
+        <p>Salmon is a kind of teleost fish. There are many different kinds of salmon. Salmon belong to the same family of fish as the trout. Most kinds of salmon live in salt water, or migrate between rivers and the sea. Many people like to eat salmon, so the fish is also grown in fish farms. </p>
+        <p>Salmon are commonly preyed upon by seals, whales, and humans.</p>
+        <p>A salmon's Latin name is "Oncorhynchus", meaning "hooked nose".</p>
+    </>},
+    { name: "Plankton", info: <>
+        <p>The word "plankton" comes from the Greek word "planktos" which means "wanderer", and that's exactly what these creatures do!</p>
+        <p>Plankton are drifting organisms that live in the surface layers of the ocean. They live in the top layer of the ocean, called the epipelagic zone. They are not strong enough to swim against ocean currents.</p>
+        <p>Over 70% of the Earth's oxygen is produced by phytoplankton, which means that they play a big role in life as we know it.</p>
+        <p>Some plankton contain toxins. People can die from these toxins if they eat plankton-eating animals like clams, mussels, or herring. Blue whales also eat plankton.</p>
+        <p>Plankton are also used in inorganic manufacturing, i.e. to make chalk.</p>
+    </>},
+    { name: "Herring", info: <>
+        <p>A herring is a small teleost fish of the genus Cluptea. Best-known of this family is probably the Atlantic Herring.
+            There are 15 different species of herring. When herrings migrate in the water they usually do this in large numbers; this is then called a school of herring.
+            Like other fish, they do this for protection.</p>
+        <p>Herring are called suspension feeders, as they filter out organisms that are suspended in the water (like plankton) using special filters in their mouths.</p>
+        <p>Humans usually catch herring to collect their eggs, which hinders their reproduction.</p>
+        <p>Because herring are an important food source for salmon and seals, a drop in the population could be disastrous.</p>
+    </>}
 ];
 async function showFieldGuide(this: GameTools.ControlButton) {
     await new Promise((resolve) => {
@@ -3035,18 +3132,6 @@ let chartScales: Chart.ChartScales = {
                 callback: (value) => (value + 'm')
             },
             id: "height-axis",
-        },
-        {
-            scaleLabel: {
-                display: true,
-                labelString: 'Salt Content',
-            },
-            ticks: {
-                // Include a dollar sign in the ticks
-                callback: (value) => (value + 'ppt')
-            },
-            id: "salt-axis",
-            position: 'right'
         }
     ],
     xAxes: [
@@ -3057,25 +3142,6 @@ let chartScales: Chart.ChartScales = {
             }
         }
     ]
-};
-
-let globalChartOptions: Chart.ChartOptions = {
-    title: {
-        display: true,
-        text: "Tide Graph"
-    },
-    legend: {
-        display: false
-    },
-    scales: chartScales,
-    plugins: {
-        colorschemes: {
-            scheme: Aspect6
-        }
-    },
-    tooltips: {
-        mode: 'index'
-    }
 };
 
 let day3_question = (isQuestion: boolean) => {
@@ -3095,11 +3161,46 @@ let day3_question = (isQuestion: boolean) => {
         data.datasets.push(Object.assign({}, defaultChartOptions, { label: 'Salt Content', data: [ 3.4, 0.8, 0.5, 3.1, 3.5 ], yAxisID: 'salt-axis' }));
         data.datasets.push(Object.assign({}, defaultChartOptions, { label: 'Toxin Level', data: [ 1.2, 0.1, 0.0, 1.1, 1.5 ] }));
     }
-    return <Line data={data} options={globalChartOptions}/>;
+    let opts: Chart.ChartOptions = {
+        title: {
+            display: true,
+            text: "Tide Graph"
+        },
+        legend: {
+            display: false
+        },
+        scales: chartScales,
+        plugins: {
+            colorschemes: {
+                scheme: Aspect6
+            }
+        },
+        tooltips: {
+            mode: 'index'
+        }
+    };
+    if(isQuestion)
+        opts.scales.yAxes.push({
+            scaleLabel: {
+                display: true,
+                labelString: 'Salt Content',
+            },
+            ticks: {
+                // Include a dollar sign in the ticks
+                callback: (value) => (value + 'ppt')
+            },
+            id: "salt-axis",
+            position: 'right'
+        });
+    return <Line data={data} options={opts}/>;
 };
+
+const day3_help = "You can mouse over items on the chart to learn what data set they belong to.<hr/>";
 
 let myArray = [
     new GameTools.Invoke(() => GameTools.warnUser()),
+    new GameTools.SetBackground(require('./external/images/multiple_question_marks.svg'), "gt-background-tile"),
+    new GameTools.TitleScreen(),
     GameTools.label("chapter_selection"),
     new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Choose a chapter.", [
         { html: "Chapter 1" },
@@ -3188,7 +3289,7 @@ let myArray = [
         toggleInputDisabled();
     }),
     GameTools.label("foodweb_question"),
-    new GameTools.DragTargetsQuestion("Drag the items on the right to the appropriate targets on the left.", [
+    new GameTools.DragTargetsQuestion("Drag <b>all</b> the items on the right to the appropriate targets on the left.", [
         { name: "Blue Whale", target: "What eats plankton?" },
         { name: "Herring", target: "What eats plankton?" },
         { name: "Seal", target: "What eats herring?" },
@@ -3254,7 +3355,7 @@ let myArray = [
         await controller.sendMessage("That's right.\nToo bad we at PORPIS don't have a salmon facility.");
         await controller.sendMessage("Wait!\nThere's this salmon expert that I know from a long way back, Dr. Salman Wise.");
         await controller.sendMessage("Let me give you his contact information.\nHe can probably help you, if you can talk to him...");
-        await controller.sendMessage("Also, I have this card that your boss, Anna gave to me a while ago. Maybe it would be useful.");
+        await controller.sendMessage("Also, I have this card that your boss, Anna, gave to me a while ago. Maybe it would be useful.");
         GameTools.DialogueExperience.doReenableInput = true;
         controller.showCloseButton();
     }),
@@ -3311,7 +3412,7 @@ let myArray = [
             <br/>
             They have a hard calcareous shell made of two parts or 'valves'. The soft parts are inside the shell. The shell is usually bilaterally symmetrical.
             <br/>
-            Scallops, and file clams can swim to escape a predator, clapping their valves together to create a jet of water.
+            Scallops and file clams can swim to escape a predator, clapping their valves together to create a jet of water.
         </p>))))
         }
     ], 0),
@@ -3346,8 +3447,8 @@ let myArray = [
     new GameTools.SetBackground(require('./external/images/secure_building_guarded.svg')),
     new GameTools.InfoBox("Security guards", <>
         <p>Soooo... you want to talk to Dr. Wise?</p>
-        <p>Well, we might let you in... if you pass this quiz.</p>
-        <p>If you are confused, check your field guide for information.</p>
+        <p>Well, we might let you in... if you pass this fun facts quiz.</p>
+        <p>If you are confused, you may need to do some research.</p>
     </>),
     GameTools.label("day2_wisequiz"),
     new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Oncorhynchus means...", [
@@ -3367,7 +3468,7 @@ let myArray = [
     ]),
     new GameTools.Question(GameTools.QuestionType.MultipleChoice, "The early freshwater phase of the coho salmon can be as long as...", [
         { html: "Three weeks" },
-        { html: "TWo years", correct: true },
+        { html: "Two years", correct: true },
         { html: "The time it takes to eat one of Tall Teddy's Tasty Treats" }
     ]),
     new GameTools.Question(GameTools.QuestionType.MultipleChoice, "Parr marks help salmon...", [
@@ -3397,7 +3498,7 @@ let myArray = [
         <p><b>We think it's time for you to leave....</b></p>
     </>),
     new GameTools.SetBackground(require('./components/grass.svg')),
-    new GameTools.InfoBox("You", "You hide in the bushes so you can text Dr. Wise and tell him about the situation. Meanwhile, you find this..."),
+    new GameTools.InfoBox("", "You hide in the bushes so you can text Dr. Wise and tell him about the situation. Meanwhile, you find this..."),
     new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day2_notebookitems, GameTools.noteBookItem("Creature Card", () => new CreatureCard(`${getEquivalentCodeLetter('O')} ${getEquivalentCodeLetter('P')}`, require('./external/images/plumose.jpg'), "Plumose anemone", "Metridium giganteum", <p>
         Plumose anemones are sea anemones found mostly in the cooler waters of the northern Pacific and Atlantic oceans.
         They are characterized by their numerous threadlike tentacles extending from atop a smooth cylindrical column,
@@ -3493,10 +3594,10 @@ let myArray = [
         GameTools.DialogueExperience.doReenableInput = true;
         controller.showCloseButton();
     }),
-    new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day3_notebookitems, GameTools.noteBookItem("Tide Graph", () => new GameTools.ReactInfoBox(<div>
+    new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day3_notebookitems, GameTools.noteBookItem("Tide Graph", () => GameTools.help(new GameTools.ReactInfoBox(<div>
         <GameTools.ModalTitleBar showClose={true}/>
         {day3_question(false)}
-        </div>)))),
+        </div>), day3_help)))),
     new GameTools.AddToNotebook(() => notebookList, GameTools.appendToArray(day3_notebookitems, GameTools.noteBookItem("Creature Card", () => new CreatureCard(`${getEquivalentCodeLetter('E')} ${getEquivalentCodeLetter('F')}`, require('./external/images/gga.jpg'), "Giant green anemone", "Anthopleura xanthogrammica", <p>
         Giant green anemones are sea anemones commonly found in the Pacific Ocean.
         <br/>

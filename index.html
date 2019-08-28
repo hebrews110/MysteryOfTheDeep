@@ -60,7 +60,8 @@
                         enumerable: true,
                         writable: true,
                         value: function remove() {
-                            this.parentNode.removeChild(this);
+                            if(this.parentNode != undefined && this.parentNode != null)
+                                this.parentNode.removeChild(this);
                         }
                         });
                     });
