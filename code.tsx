@@ -3197,7 +3197,6 @@ const day3_help = "You can mouse over items on the chart to learn what data set 
 
 let myArray = [
     new GameTools.Invoke(() => GameTools.warnUser()),
-    new GameTools.Loop({ index: "interactiveTest" }),
     new GameTools.SetBackground(require('./external/images/multiple_question_marks.svg'), "gt-background-tile"),
     new GameTools.TitleScreen(),
     GameTools.label("chapter_selection"),
