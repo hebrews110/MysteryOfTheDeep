@@ -1,0 +1,47 @@
+! global char_name = Anna Atlantic
+
+
++ where should i start
+- Maybe you could try talking to oceanographers.
+^ They'll probably be interested!
+
++ what are we solving today
+- Well, I finally met with the tipster who told us about chemicals being dumped into the Awakataka Strait...
+^ turns out he has a lot of evidence!
+^ We're looking for barrels that look something like this:
+^ <call>require_img barrels</call>
+^ Try not to let too many people know what we're doing!
+^ We don't know who's behind this...
+^ so we can't trust anybody!
+
++ will we be working together
+- Not this time.
+^ I have to track down some leads of my own.
+^ But I'm sure you'll do a great job!
+
++ * barrels are contaminating *
+- Makes sense. Any other information?
+
++ * whales that the news *
+- Ahh. You're really smart, Ace!
+^ Here's something.
+^ I was following one of my leads, and it led me to an office.
+^ The place was a total wreck!
+^ All I could find was this one coded message:
+^ **<call>userFunc getMessage</call>**
+^ I have no idea what it means, but it might have been encoded using the code on my old Creature Cards.
+^ I gave those out to lots of different people over the years, but maybe you'll stumble across them during your search.
+
++ its getting late i should go
+- See you tomorrow!
+
++ martin mersenich * dumped *
+- No way!
+^ That explains why he took off so quickly when the news came out!
+^ We'll have to call the police as soon as possible.
+
++ so are we finished
+- We are!
+^ I really appreciate all your help.
+^ Hopefully we'll be able to solve another case soon!
+^ I'm already hearing rumors about exotic animals being seen around the city...
