@@ -3120,30 +3120,6 @@ let defaultChartOptions: Chart.ChartDataSets = {
     pointHitRadius: 10,
 };
 
-let chartScales: Chart.ChartScales = {
-    yAxes: [
-        {
-            scaleLabel: {
-                display: true,
-                labelString: 'Height',
-            },
-            ticks: {
-                // Include a dollar sign in the ticks
-                callback: (value) => (value + 'm')
-            },
-            id: "height-axis",
-        }
-    ],
-    xAxes: [
-        {
-            scaleLabel: {
-                display: true,
-                labelString: 'Time'
-            }
-        }
-    ]
-};
-
 let day3_question = (isQuestion: boolean) => {
     let data: Chart.ChartData = {
         labels: (function() {
@@ -3167,9 +3143,31 @@ let day3_question = (isQuestion: boolean) => {
             text: "Tide Graph"
         },
         legend: {
-            display: false
+            display: true
         },
-        scales: chartScales,
+        scales: {
+            yAxes: [
+                {
+                    scaleLabel: {
+                        display: true,
+                        labelString: 'Height',
+                    },
+                    ticks: {
+                        // Include a dollar sign in the ticks
+                        callback: (value) => (value + 'm')
+                    },
+                    id: "height-axis",
+                }
+            ],
+            xAxes: [
+                {
+                    scaleLabel: {
+                        display: true,
+                        labelString: 'Time'
+                    }
+                }
+            ]
+        },
         plugins: {
             colorschemes: {
                 scheme: Aspect6
@@ -3199,6 +3197,7 @@ const day3_help = "You can mouse over items on the chart to learn what data set 
 
 let myArray = [
     new GameTools.Invoke(() => GameTools.warnUser()),
+    new GameTools.Loop({ index: "interactiveTest" }),
     new GameTools.SetBackground(require('./external/images/multiple_question_marks.svg'), "gt-background-tile"),
     new GameTools.TitleScreen(),
     GameTools.label("chapter_selection"),
@@ -3688,13 +3687,14 @@ let myArray = [
     new GameTools.SetBackground(require('./components/water.svg')),
     new GameTools.Delay(3000),
     new GameTools.DialogueExperience(require('./external/atkins.rive'), "Captain Atkins", null, [
-        "Not particularly... there was junk all over the seats! Also, the flight attendant was really rude."
+        "Not particularly... the seats were really dirty! Also, the flight attendant was really rude."
     ], async(controller) => {
         toggleInputDisabled();
         await controller.sendMessage("Welcome!");
         await controller.sendMessage("I hope you had a comfortable flight.");
         toggleInputDisabled();
     }),
+    new GameTools.InfoBox("Let's look for the barrels!", "If you can't find the barrels, click the camera, and you will then be able to resurface and choose a different location."),
     GameTools.label("interactiveTest"),
     new GameTools.InteractiveSVGFinder("Where should we look for the barrels?", require('./external/images/barrel_map.svg'), [ ".barrel-pinpoint"], 3),
     new GameTools.Condition(new GameTools.Loop({ index: "find-barrels"}), GameTools.label(""), () => {
