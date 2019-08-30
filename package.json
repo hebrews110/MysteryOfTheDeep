@@ -87,8 +87,8 @@
         "velocity-animate": "^1.5.2"
     },
     "scripts": {
-        "watch": "parcel index.html -d docs -p 8080 --no-autoinstall --no-source-maps --public-url '.'",
-        "build": "parcel build index.html -d docs --no-autoinstall --detailed-report --no-source-maps --public-url '.'",
+        "watch": "parcel index.html -d docs -p 8080 --no-autoinstall --no-source-maps",
+        "build": "rm -r docs/* && parcel build index.html -d docs --no-autoinstall --detailed-report --no-source-maps --public-url '.'",
         "start": "npm run watch",
         "serve": "live-server --port=8080 dist"
     },

@@ -4,6 +4,8 @@
 import "core-js/stable";
 import "regenerator-runtime/runtime";
 
+import './components/dom-polyfills.js';
+
 import asyncLib from 'async';
 
 import './external/import-jquery';
@@ -2943,7 +2945,6 @@ import whale from './external/whale.svg';
 import barrels from './external/barrels.png';
 import seaweed from './external/seaweed.png';
 import diver from './external/diver.svg';
-import { SSL_OP_EPHEMERAL_RSA } from "constants";
 
 let day1Newspaper = new GameTools.ReactInfoBox(<GameTools.Newspaper paperName="Routine Rambler" subhead="" articles={[
     {
@@ -3194,6 +3195,8 @@ let day3_question = (isQuestion: boolean) => {
 };
 
 const day3_help = "You can mouse over items on the chart to learn what data set they belong to.<hr/>";
+
+let currentHint = 0;
 
 let myArray = [
     new GameTools.Invoke(() => GameTools.warnUser()),
@@ -3746,8 +3749,41 @@ let myArray = [
         GameTools.DialogueExperience.doReenableInput = true;
         controller.showCloseButton();
     }),
+    new GameTools.Invoke(() => currentHint = 0),
     GameTools.label('solveCode'),
-    new GameTools.Question(GameTools.QuestionType.FillInTheBlank, "What do you think the code is?", [ { html: realCode, correct: true }], true, undefined, `<p><b>${codedCode}</b></p>`),
+    new GameTools.Question(GameTools.QuestionType.FillInTheBlank, "What do you think the code is?", [ { html: realCode, correct: true }], false, undefined, `<p><b>${codedCode}</b></p>`),
+    new GameTools.Invoke(async() => {
+        const hints = [
+            "<li><p>The letters on the card tell you how to encode the message. For example, if the card says 'A=K', the letter A would be replaced by the letter K when you are encoding it.</p>" +
+            "<p>When decoding, it works the other way, i.e. the letter K become the letter A in the decoded message.</p></li>",
+            "<li><p>Think of each letter as a number to figure out the code.</p></li>",
+            "<li><p>There is a mathematical difference between the two letters.</p>" +
+            "<p>For example, if the card says 'A=K', those two letters are ten spaces apart in the alphabet, so you could subtract 10 from the letter K's position to get the letter A.</p></li>",
+            "<li><p>Remember, the code goes backwards.</p></li>"
+        ];
+        if(GameTools.lastResult)
+            return;
+        let hint: string;
+        if(currentHint < hints.length) {
+            hint = "<ul>";
+            for(let i = 0; i <= currentHint; i++) { 
+                hint += hints[i];
+            }
+            hint += "</ul>";
+            currentHint++;
+        } else {
+            hint = "The answer is: <b>" + realCode + "</b>";
+        }
+        let box = new GameTools.InfoBox("Nope, here's a hint:", hint, "Try again", GameTools.InfoBox.defaultDelay, { customBodyClassList: "text-left"});
+        await new Promise((resolve) => {
+            box.once('undisplay', () => {
+                GameTools.lastResult = false;
+                resolve();
+            });
+            box.display();
+        });
+    }),
+    new GameTools.Condition(GameTools.label(""), new GameTools.Loop({ index: "solveCode" })),
     new GameTools.DialogueExperience(require('./external/atlantic.rive'), "Anna Atlantic", null, [
         "Martin Mersenich is the one who dumped those barrels there!",
         "So, are we finished?"
