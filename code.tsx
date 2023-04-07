@@ -91,15 +91,15 @@ namespace GameTools {
                 var $this = $(this);
                 var elems = $this.children(childElem);
                 shuffle(elems);
-    
+
                 elems.each(function() {
                     $(this).detach();
                 });
-    
+
                 for(var i=0; i < elems.length; i++) {
-                    $this.append(elems[i]);      
+                    $this.append(elems[i]);
                 }
-            });    
+            });
         };
         $.fn.equals = function(compareTo) {
             if (!compareTo || this.length != compareTo.length) {
@@ -125,7 +125,7 @@ namespace GameTools {
     }
     export function initializeArray(array: GameArray, clearPollers = false, shouldWarn = false) {
         array.contentsIndex = 0;
-        
+
         if(!array.initialized || clearPollers)
             array.indexPollers = new Array();
         array.initialized = true;
@@ -165,7 +165,7 @@ namespace GameTools {
             let nextItem = await toDisplayedItem(realItem, array);
             return nextItem;
         }
-        
+
     }
     export abstract class DisplayedItem {
         public parentArray: GameArray;
@@ -201,7 +201,7 @@ namespace GameTools {
                     console.warn("In most cases, rendering React components to a string will not give the desired behavior, " +
                                  "as event handlers and other related metadata will not be included.");
                 }
-                
+
             } else {
                 value = (val.valueOf() as T);
             }
@@ -240,7 +240,7 @@ namespace GameTools {
                 return visibleStack[visibleStack.length - 1];
             else
                 return null;
-        } 
+        }
         static updateHelp(helpItem?: HelpButton) {
             if(helpItem == undefined || helpItem == null)
                 helpItem = helpRef.current;
@@ -297,7 +297,7 @@ namespace GameTools {
             if(this.objStyle.forceShowClose === undefined)
                 this.objStyle.forceShowClose = false;
             if(this.objStyle.customBackgroundClassList === undefined)
-                this.objStyle.customBackgroundClassList = ""; 
+                this.objStyle.customBackgroundClassList = "";
             if(this.objStyle.customBodyClassList === undefined)
                 this.objStyle.customBodyClassList = "";
             if(this.objStyle.useAsContainer === undefined)
@@ -310,7 +310,7 @@ namespace GameTools {
                 this.objStyle.stripPunctuation = true;
             return this.objStyle;
         }
-        
+
         public on: (event: string, fn: (...args: any[]) => void) => void;
         public once: (event: string, fn: (...args: any[]) => void) => void;
         public off: (event?: string, fn?: (...args: any[]) => void) => void;
@@ -338,7 +338,7 @@ namespace GameTools {
                 initializeArray(this.parentArray);
             }
             return this.parentArray;
-            
+
         }
         async resize() {
 
@@ -559,7 +559,7 @@ namespace GameTools {
                 } else {
                     this.$dialog.find(".modal-header").hide();
                 }
-                    
+
                 if(this.text != null) {
                     this.$dialog.find(".modal-body").show();
                     if(!this.objStyle.useAsContainer) {
@@ -574,7 +574,7 @@ namespace GameTools {
                         $(header).insertBefore(reactContainer);
                         $(footer).insertAfter(reactContainer);
                     }
-                    
+
                 } else {
                     this.$dialog.find(".modal-body").hide();
                 }
@@ -588,7 +588,7 @@ namespace GameTools {
                     });
                 });
                 this.$dialog.find(".modal-footer").empty();
-                
+
                 let realText = DisplayedItem.getValue(this, this.buttonText);
                 let closeShown = false;
                 if(realText != null && realText != "") {
@@ -619,7 +619,7 @@ namespace GameTools {
 
                 $closeButtons.off("click");
                 $closeButtons.on("click", (e) => this.buttonCallback(e));
-                
+
                 this.$dialog.one("show.bs.modal", (e) => {
                     var zIndex = 1040 + (10 * $('.modal:visible').length);
                     $(e.target).css('z-index', zIndex);
@@ -719,7 +719,7 @@ namespace GameTools {
             let $container = $("<div></div>");
             $container.addClass("level-buttons");
             this.levelMarkups.forEach((element, index) => {
-                
+
                 let $button = $("<button></button>");
                 DisplayedItem.getValue(this, element, $button.get(0));
                 $button.data("level-id", index);
@@ -804,7 +804,7 @@ namespace GameTools {
         relative?: boolean;
     }
     export class Loop extends GameTools.DisplayedItem {
-        
+
         private numLoops = 0;
         constructor(public loopInfo: LoopInfo, public times = -1) {
             super();
@@ -869,7 +869,7 @@ namespace GameTools {
         }
     }
     export async function restart(array: GameArray, shouldInitialize = false) {
-        
+
         if(array.contentsIndex != undefined) {
             const item = array[array.contentsIndex];
             if(isDisplayedItem(item) && item.isDisplaying()) {
@@ -897,14 +897,14 @@ namespace GameTools {
     export function HSLToHex(h,s,l) {
         s /= 100;
         l /= 100;
-      
+
         let c = (1 - Math.abs(2 * l - 1)) * s,
             x = c * (1 - Math.abs((h / 60) % 2 - 1)),
             m = l - c/2,
             r: string | number = 0,
             g: string | number = 0,
             b: string | number = 0;
-      
+
         if (0 <= h && h < 60) {
           r = c; g = x; b = 0;
         } else if (60 <= h && h < 120) {
@@ -922,7 +922,7 @@ namespace GameTools {
         r = Math.round((r + m) * 255).toString(16);
         g = Math.round((g + m) * 255).toString(16);
         b = Math.round((b + m) * 255).toString(16);
-      
+
         // Prepend 0s, if necessary
         if (r.length == 1)
           r = "0" + r;
@@ -930,7 +930,7 @@ namespace GameTools {
           g = "0" + g;
         if (b.length == 1)
           b = "0" + b;
-      
+
         return "#" + r + g + b;
     }
     export function getContrastYIQ(hexcolor){
@@ -995,7 +995,7 @@ namespace GameTools {
                 "height": "100%"
             });
             this.$dialog.find(".modal-body").append($containerDiv);
-            
+
             $bothDivs.addClass("dragtargets-div");
             $targetsDiv.addClass("targets-div");
             $itemsDiv.addClass("items-div");
@@ -1020,10 +1020,10 @@ namespace GameTools {
                         }));
                         $div.children("i").hide();
                         targetNames.set(DisplayedItem.getValue(this, target), $div.get(0));
-        
+
                         $targetDiv = $div;
-                        
-                        
+
+
                         $targetDiv.attr("title", $targetDiv.data("my-text"));
                         $targetDiv.tooltip({
                             html: true
@@ -1047,7 +1047,7 @@ namespace GameTools {
                 ($targetsDiv as any).randomize();
             if(this.shuffleOptions)
                 ($itemsDiv as any).randomize();
-             
+
             let gtBeforeDropFunction = function (event, ui) {
                 console.log("gt before drop");
                 if($(this).hasClass("target")) {
@@ -1085,7 +1085,7 @@ namespace GameTools {
                 if(!displayedItem.allowMultiple && ($(this).hasClass("target") && $(this).find(".drag-item").length != 0) && !$draggable.equals($(this).find(".drag-item"))) {
                     $newParent = $itemsDiv;
                     isTeleporting = true;
-                    
+
                 }
                 $draggable.detach().appendTo($newParent);
                 if($newParent.is($itemsDiv))
@@ -1096,7 +1096,7 @@ namespace GameTools {
                 start: function (event, ui) {
                     $(ui.helper).css({ "transform": "none"});
                     $(this).data("startingScrollTop",$(this).parent().scrollTop());
-                    
+
                 },
                 revert: function (droppable) {
                     if(!droppable) {
@@ -1181,7 +1181,7 @@ namespace GameTools {
                         if(this.interactiveComponents)
                             this.interactiveComponents.forEach((selector, index) => {
                                 var svg = this.svgElement;
-        
+
                                 let elements = svg.querySelectorAll(DisplayedItem.getValue(this, selector));
                                 elements.forEach(element => {
                                     $(element).addClass("interactive-component");
@@ -1234,7 +1234,7 @@ namespace GameTools {
             return (b_item.button != undefined && b_item.link != undefined);
         }
         async itemFound($component: JQuery<any>): Promise<boolean> {
-            
+
             if(this.itemIndexes.indexOf($component.data("index")) == -1) {
                 this.itemsFound++;
                 this.itemIndexes.push($component.data("index"));
@@ -1328,7 +1328,7 @@ namespace GameTools {
                 DisplayedItem.getValue(this, this.instructions, $span.get(0));
                 $body.append($span);
             }
-                
+
             this.finder.setTitle();
             var $finderButtons = $("<div></div>").addClass("finder-buttons").appendTo($body);
             this.buttons.forEach((element, index) => {
@@ -1373,7 +1373,7 @@ namespace GameTools {
                 GameTools.lastResult = isTrue == this.correctAnswer;
             } else
                 GameTools.lastResult = isTrue;
-           
+
             super.buttonCallback(e);
         }
         async dialogCreated() {
@@ -1466,7 +1466,7 @@ namespace GameTools {
                     } else if(this.type == QuestionType.FillInTheBlank) {
                         $button.prop("disabled", true);
                     }
-                    
+
                     await sleep(3000);
                 }
                 this.displayNext();
@@ -1510,7 +1510,7 @@ namespace GameTools {
             } else {
                 throw new Error("Unexpected question type");
             }
-            
+
         }
     }
     export function isElement(obj: Node): boolean {
@@ -1569,12 +1569,12 @@ namespace GameTools {
                 this.options.scroll = false;
               }
             },
-        
+
             _mouseStop: function(event) {
               this._super(event);
               this.options.scroll = this.origScroll;
             }
-        
+
         });
         $(document).on('hidden.bs.modal', '.modal', function () {
             $('.modal:visible').length && $(document.body).addClass('modal-open');
@@ -1646,7 +1646,7 @@ namespace GameTools {
                     resolve();
                 });
             });
-            
+
             if(!wasHandled && defaultCase != null) {
                 shouldDisplayNext = await defaultCase.handler(conditionVal);
             }
@@ -1686,7 +1686,7 @@ namespace GameTools {
         }
         public trigger(): void {
             this.waitingPromises.forEach((resolve) => resolve());
-        } 
+        }
     }
     export class Call<T extends DisplayedItem> extends DisplayedItem {
         constructor(private fn: (item: T) => any, private labelName: GameValue<string>, private returnData = false) {
@@ -1719,7 +1719,7 @@ namespace GameTools {
         } else {
             return new Label(label) as LabelledItem&T;
         }
-        
+
     }
     export function help<T extends GameArrayItem>(item: T, help: GameValue<string>): ContextualHelpItem&T {
         let hi = (item as unknown as ContextualHelpItem);
@@ -1840,7 +1840,7 @@ namespace GameTools {
         const a = 'àáäâãåăæąçćčđďèéěėëêęğǵḧìíïîįłḿǹńňñòóöôœøṕŕřßşśšșťțùúüûǘůűūųẃẍÿýźžż·/_,:;';
         const b = 'aaaaaaaaacccddeeeeeeegghiiiiilmnnnnooooooprrsssssttuuuuuuuuuwxyyzzz------';
         const p = new RegExp(a.split('').join('|'), 'g');
-      
+
         return string.toString().toLowerCase()
           .replace(/\s+/g, '-') // Replace spaces with -
           .replace(p, c => b.charAt(a.indexOf(c))) // Replace special characters
@@ -1955,7 +1955,7 @@ namespace GameTools {
                 </div>
             </div>;
         }
-        
+
     }
     export interface DialogueAction {
         character: GameValue<"you" | "them">;
@@ -2069,7 +2069,7 @@ namespace GameTools {
             let reply = await this.bot.reply("local-user", newMessage, this);
             // Now send the message throught the backend API
             await this.sendMessage(reply);
-            
+
             this.asked.add(newMessage);
             let requiredQuestions = this.allowedMessages;
             let notDone = requiredQuestions.some((msg) => {
@@ -2084,8 +2084,8 @@ namespace GameTools {
                     DialogueExperience.doReenableInput = true;
                 }
             }
-            
-            
+
+
         }
         objectHelp(): string {
             return super.objectHelp() + "Chat with one of the characters in the game!<p></p>If you can't choose a message, the conversation may have ended (check for a close button in the top right of the chat widget).<hr/>";
@@ -2128,7 +2128,7 @@ namespace GameTools {
         }
         async reset() {
             this.endDialogueWhenMessageFinishes = false;
-            
+
             console.log("Dropping messages");
             dropMessages();
             this.currentStatement = 0;
@@ -2255,12 +2255,12 @@ namespace GameTools {
                 if(this.shouldContinue)
                     this.animateNextImage();
             };
-            
+
             $image.addClass("hole-finder-animate");
             this.startTime = Date.now();
             console.log("start " + this.startTime);
             setTimeout(completeCallback, 1000);
-            
+
             this.newIndex();
         }
         static removeImageBlanks(imageObject: HTMLImageElement) {
@@ -2271,7 +2271,7 @@ namespace GameTools {
             canvas.setAttribute("height", imgHeight.toString());
             var context = canvas.getContext('2d');
             context.drawImage(imageObject, 0, 0);
-        
+
             var imageData = context.getImageData(0, 0, imgWidth, imgHeight),
                 data = imageData.data,
                 getRBG = function(x, y) {
@@ -2289,10 +2289,10 @@ namespace GameTools {
                 },
                         scanY = function (fromTop) {
                 var offset = fromTop ? 1 : -1;
-        
+
                 // loop through each row
                 for(var y = fromTop ? 0 : imgHeight - 1; fromTop ? (y < imgHeight) : (y > -1); y += offset) {
-        
+
                     // loop through each column
                     for(var x = 0; x < imgWidth; x++) {
                         var rgb = getRBG(x, y);
@@ -2309,10 +2309,10 @@ namespace GameTools {
             },
             scanX = function (fromLeft) {
                 var offset = fromLeft? 1 : -1;
-        
+
                 // loop through each column
                 for(var x = fromLeft ? 0 : imgWidth - 1; fromLeft ? (x < imgWidth) : (x > -1); x += offset) {
-        
+
                     // loop through each row
                     for(var y = 0; y < imgHeight; y++) {
                         var rgb = getRBG(x, y);
@@ -2322,26 +2322,26 @@ namespace GameTools {
                             } else {
                                 return Math.min(x + 1, imgWidth - 1);
                             }
-                        }      
+                        }
                     }
                 }
                 return null; // all image is white
             };
-        
+
             var cropTop = scanY(true),
                 cropBottom = scanY(false),
                 cropLeft = scanX(true),
                 cropRight = scanX(false),
                 cropWidth = cropRight - cropLeft,
                 cropHeight = cropBottom - cropTop;
-        
+
             canvas.setAttribute("width", cropWidth.toString());
             canvas.setAttribute("height", cropHeight.toString());
             // finally crop the guy
             canvas.getContext("2d").drawImage(imageObject,
                 cropLeft, cropTop, cropWidth, cropHeight,
                 0, 0, cropWidth, cropHeight);
-        
+
             return canvas.toDataURL();
         }
         static async cropImageURL(url: string) {
@@ -2369,13 +2369,13 @@ namespace GameTools {
             this.modal_content.append(holeFinderContainer = $("<div></div>").addClass("hole-finder-container"));
             holeFinderContainer.append(this.holeFinder = $("<div></div>"));
             this.holeFinder.addClass("hole-finder " + this.customClasses);
-            
+
             const bubbleContainer = $("<div></div>").addClass("bubble-container");
             this.holeFinder.append(bubbleContainer);
             for(var i = 0; i < 50; i++) {
                 bubbleContainer.append($("<span class='bubble'></span>"));
             }
-            
+
             this.images = $("<div></div>").addClass("hole-finder-images");
             this.holeFinder.append(this.images);
             let options = {
@@ -2393,7 +2393,7 @@ namespace GameTools {
                 setTimeout(() => {
                     this.animateNextImage();
                 }, 0);
-                
+
             });
             this.holeFinder.on('click', () => {
                 if(!this.allowClicks)
@@ -2415,7 +2415,7 @@ namespace GameTools {
                     return;
                 }
 
-                
+
 
                 const _self = this;
                 let customInfoBox = class extends InfoBox {
@@ -2562,7 +2562,7 @@ namespace GameTools {
             if ( data.indexOf( 'http://www.w3.org/2000/svg' ) < 0 ) {
                 data = data.replace( /<svg/g, `<svg xmlns=${quotes.level2}http://www.w3.org/2000/svg${quotes.level2}` );
             }
-        
+
             return data;
         }
         function encodeSVG( data ) {
@@ -2573,21 +2573,21 @@ namespace GameTools {
             else {
                data = data.replace( /'/g, '"' );
             }
-        
+
             data = data.replace( />\s{1,}</g, "><" );
             data = data.replace( /\s{2,}/g, " " );
-        
+
             return data.replace( symbols, encodeURIComponent );
         }
-        
-        
+
+
         // Get quotes for levels
         //----------------------------------------
-        
+
         function getQuotes() {
             const double = `"`;
             const single = `'`;
-        
+
             return {
                 level1: externalQuotesValue === 'double' ? double : single,
                 level2: externalQuotesValue === 'double' ? single : double
@@ -2654,7 +2654,7 @@ namespace GameTools {
                 $(img).off('click');
                 $(img).removeData('magnificPopup');
             }
-            
+
         }
         componentDidMount() {
             this.makeMagnific(this.imgRef.current);
@@ -2683,40 +2683,40 @@ namespace GameTools {
         // Wrap the amount
         if (amount < 0)
             return caesarShift(str, amount + 26);
-    
+
         // Make an output variable
         var output = '';
-    
+
         // Go through each character
         for (var i = 0; i < str.length; i ++) {
-    
+
             // Get the character we'll be appending
             var c = str[i];
-    
+
             // If it's a letter...
             if (c.match(/[a-z]/i)) {
-    
+
                 // Get its code
                 var code = str.charCodeAt(i);
-    
+
                 // Uppercase letters
                 if ((code >= 65) && (code <= 90))
                     c = String.fromCharCode(((code - 65 + amount) % 26) + 65);
-    
+
                 // Lowercase letters
                 else if ((code >= 97) && (code <= 122))
                     c = String.fromCharCode(((code - 97 + amount) % 26) + 97);
-    
+
             }
-    
+
             // Append
             output += c;
-    
+
         }
-    
+
         // All done!
         return output;
-    
+
     }
     export function codeify(code: string) {
         code = code.toUpperCase();
@@ -2770,7 +2770,7 @@ namespace GameTools {
         let n: string = num + '';
         return n.length >= width ? n : new Array(width - n.length + 1).join(z) + n;
     }
-    type RemoveFirstFromTuple<T extends any[]> = 
+    type RemoveFirstFromTuple<T extends any[]> =
         T['length'] extends 0 ? undefined :
         (((...b: T) => void) extends (a, ...b: infer I) => void ? I : []);
     export function invokeOn<T, F extends (this: T, ...args: any) => any>(obj: T, fn: F, ...args: Parameters<F>): T {
@@ -2864,12 +2864,12 @@ class CreatureCard extends GameTools.InfoBox {
 let notebookList = new Set<GameTools.NotebookItem>();
 async function showNotebook(this: GameTools.ControlButton) {
     await new Promise((resolve) => {
-        GameTools.startDisplay([ 
+        GameTools.startDisplay([
             new GameTools.ReactInfoBox(<GameTools.Notebook title="My Notebook" notebookItems={notebookList}/>, null, 0),
             new GameTools.Invoke(resolve)
         ]);
     });
-    
+
 }
 
 let infoGuide: GameTools.InfoPageItem[] = [
@@ -2900,7 +2900,7 @@ let infoGuide: GameTools.InfoPageItem[] = [
         <ol>
             <li><b>Resident</b>: These are the most commonly sighted of the three populations in the coastal waters of the northeast Pacific.
                 Residents' diets consist primarily of fish and sometimes squid, and they live in complex and cohesive family groups called pods.</li>
-            <li><b>Transient</b>: The diets of these whales consist almost exclusively of marine mammals.Transients generally travel in small groups, usually of two to six animals,
+            <li><b>Transient</b>: The diets of these whales consist almost exclusively of marine mammals, like seals. Transients generally travel in small groups, usually of two to six animals,
                 and have less persistent family bonds than residents. Transients vocalize in less variable and less complex dialects</li>
             <li><b>Offshore</b>: A third population of killer whales in the northeast Pacific was discovered in 1988, when a humpback whale researcher observed them in open water.
                 As their name suggests, they travel far from shore and feed primarily on schooling fish.
@@ -2911,7 +2911,7 @@ let infoGuide: GameTools.InfoPageItem[] = [
     </>},
     { name: "Salmon", info: <>
         <p>Salmon is a kind of teleost fish. There are many different kinds of salmon. Salmon belong to the same family of fish as the trout. Most kinds of salmon live in salt water, or migrate between rivers and the sea. Many people like to eat salmon, so the fish is also grown in fish farms. </p>
-        <p>Salmon are commonly preyed upon by seals, whales, and humans.</p>
+        <p>Salmon like to eat herring, and are commonly preyed upon by seals, whales, and humans.</p>
         <p>A salmon's Latin name is "Oncorhynchus", meaning "hooked nose".</p>
     </>},
     { name: "Plankton", info: <>
@@ -2932,7 +2932,7 @@ let infoGuide: GameTools.InfoPageItem[] = [
 ];
 async function showFieldGuide(this: GameTools.ControlButton) {
     await new Promise((resolve) => {
-        GameTools.startDisplay([ 
+        GameTools.startDisplay([
             new GameTools.InfoBox("Field Guide", <GameTools.InfoPage pages={infoGuide}>
             </GameTools.InfoPage>, null, 0, { forceShowClose: true }),
             new GameTools.Invoke(resolve)
@@ -3766,7 +3766,7 @@ let myArray = [
         let hint: string;
         if(currentHint < hints.length) {
             hint = "<ul>";
-            for(let i = 0; i <= currentHint; i++) { 
+            for(let i = 0; i <= currentHint; i++) {
                 hint += hints[i];
             }
             hint += "</ul>";
@@ -3838,7 +3838,7 @@ function startCheck() {
             const dbg = new Function("debugger;");
             dbg();
             var after = new Date().getTime();
-            if (after - before > minimalUserResponseInMiliseconds) { // user had to resume the script manually via opened dev tools 
+            if (after - before > minimalUserResponseInMiliseconds) { // user had to resume the script manually via opened dev tools
                 cheated();
             }
         }, 1000);
@@ -3852,8 +3852,8 @@ function startCheck() {
         (window as any).shortcut.add("Ctrl+U", cheated);
         (window as any).shortcut.add("Ctrl+Shift+I", cheated);
     }
-    
-      
+
+
 }
 
 function stopCheck() {
@@ -3861,7 +3861,7 @@ function stopCheck() {
 }
 
 $(async function() {
-    
+
     console.log(process.env.NODE_ENV);
     let badge = undefined;
     if(process.env.NODE_ENV == 'production') {
